@@ -1,0 +1,92 @@
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: rgba(12, 10, 9, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+
+.loading-card {
+  text-align: center;
+  padding: var(--space-2xl) var(--space-xl);
+  max-width: 320px;
+  width: 100%;
+}
+
+.loading-spinner-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-lg);
+}
+
+.loading-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--clr-border);
+  border-top-color: var(--clr-accent);
+  animation: spin 1.2s linear infinite;
+}
+
+.loading-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--clr-accent);
+}
+
+.loading-message {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--clr-text-primary);
+  margin-bottom: var(--space-lg);
+}
+
+.loading-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  text-align: left;
+}
+
+.loading-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.8125rem;
+  color: var(--clr-text-muted);
+  transition: color var(--duration-normal);
+}
+
+.loading-step.active {
+  color: var(--clr-accent);
+}
+
+.loading-step.done {
+  color: var(--clr-success);
+}
+
+.loading-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--clr-text-muted);
+  flex-shrink: 0;
+  transition: all var(--duration-normal);
+}
+
+.loading-step.active .loading-step-dot {
+  background: var(--clr-accent);
+  box-shadow: 0 0 8px var(--clr-accent-glow);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.loading-step.done .loading-step-dot {
+  background: var(--clr-success);
+}

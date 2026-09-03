@@ -1,0 +1,794 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Camera, Mic, MicOff, Sparkles, DollarSign, CheckCircle,
+  Send, ArrowRight, ArrowLeft, Image as ImageIcon, Upload,
+  Play, Square, RotateCcw, FileText, PartyPopper, Copy, X
+} from 'lucide-react';
+import {
+  createDraftProduct, uploadImage, uploadVoice,
+  generateCatalogue, getPrice, confirmProduct,
+  publishProduct, getProduct, exportProduct
+} from '../services/api';
+import { BACKEND_ORIGIN } from '../config';
+import { resolveImageUrl, formatPrice } from '../utils/helpers';
+import StatusBadge from '../components/StatusBadge';
+import LoadingOverlay from '../components/LoadingOverlay';
+import './CaptureFlow.css';
+
+const STEPS = [
+  { id: 'photo', label: 'Photo', icon: Camera },
+  { id: 'voice', label: 'Voice', icon: Mic },
+  { id: 'catalogue', label: 'Catalogue', icon: Sparkles },
+  { id: 'review', label: 'Review', icon: CheckCircle },
+  { id: 'publish', label: 'Publish', icon: Send },
+];
+
+const LANGUAGES = [
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'ta', label: 'தமிழ்' },
+  { code: 'bn', label: 'বাংলা' },
+  { code: 'mr', label: 'मराठी' },
+  { code: 'te', label: 'తెలుగు' },
+  { code: 'en', label: 'English' },
+];
+
+export default function CaptureFlow({ toast }) {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
+  const [loadingSteps, setLoadingSteps] = useState([]);
+  const [loadingStepIdx, setLoadingStepIdx] = useState(0);
+
+  // Photo state
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [imageResult, setImageResult] = useState(null);
+
+  // Voice state
+  const [language, setLanguage] = useState('hi');
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [voiceResult, setVoiceResult] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const canvasRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const analyserRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Catalogue state
+  const [catalogueResult, setCatalogueResult] = useState(null);
+  const [priceResult, setPriceResult] = useState(null);
+
+  // Review state — editable fields
+  const [editFields, setEditFields] = useState({});
+
+  // Publish state
+  const [publishDone, setPublishDone] = useState(false);
+  const [exportJson, setExportJson] = useState(null);
+  const [showExport, setShowExport] = useState(false);
+
+  // ─── Step 0: Create draft + capture photo ──────────────────────────────
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }
+
+  async function handleUploadImage() {
+    if (!imageFile) return;
+    setLoading(true);
+    setLoadingMsg('Processing your craft photo...');
+    setLoadingSteps(['Creating product draft', 'Uploading image', 'Enhancing with AI']);
+    setLoadingStepIdx(0);
+    try {
+      // Create draft if we don't have a product yet
+      let prod = product;
+      if (!prod) {
+        setLoadingStepIdx(0);
+        prod = await createDraftProduct(language);
+        setProduct(prod);
+      }
+      setLoadingStepIdx(1);
+      const res = await uploadImage(prod.product_id, imageFile);
+      // Response: { images: { original_url, enhanced_url } }
+      setImageResult(res.images);
+      setLoadingStepIdx(2);
+      // Brief delay to show final step
+      await new Promise(r => setTimeout(r, 500));
+      setCurrentStep(1);
+      toast.success('Photo uploaded & enhanced!');
+    } catch (err) {
+      toast.error(err.serverMessage || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Step 1: Voice recording ───────────────────────────────────────────
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+        cancelAnimationFrame(animFrameRef.current);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+
+      // Audio visualizer
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      drawWaveform();
+    } catch (err) {
+      toast.error('Microphone access denied');
+    }
+  }
+
+  function drawWaveform() {
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+    const ctx = canvas.getContext('2d');
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+      animFrameRef.current = requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(dataArray);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const barWidth = (canvas.width / bufferLength) * 2.5;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (dataArray[i] / 255) * canvas.height;
+        const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+        gradient.addColorStop(0, '#f59e0b');
+        gradient.addColorStop(1, '#ea580c');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+        x += barWidth;
+      }
+    }
+    draw();
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }
+
+  function resetRecording() {
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setVoiceResult(null);
+  }
+
+  async function handleUploadVoice() {
+    if (!audioBlob || !product) return;
+    setLoading(true);
+    setLoadingMsg('Transcribing your voice note...');
+    setLoadingSteps(['Processing audio', 'Extracting craft details', 'Identifying materials & technique']);
+    setLoadingStepIdx(0);
+    try {
+      const audioFile = new File([audioBlob], 'voice.webm', { type: 'audio/webm' });
+      setLoadingStepIdx(1);
+      const res = await uploadVoice(product.product_id, audioFile);
+      // Response: { description, language_original, material, craft_type,
+      //             production: { time_days, technique }, transcription_confidence }
+      setVoiceResult(res);
+      setLoadingStepIdx(2);
+      await new Promise(r => setTimeout(r, 500));
+      setCurrentStep(2);
+      toast.success(`Voice transcribed! Confidence: ${Math.round(res.transcription_confidence * 100)}%`);
+    } catch (err) {
+      toast.error(err.serverMessage || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Step 2: Catalogue + price generation ──────────────────────────────
+
+  async function handleGenerateCatalogue() {
+    if (!product) return;
+    setLoading(true);
+    setLoadingMsg('Generating AI catalogue...');
+    setLoadingSteps(['Analyzing craft...', 'Generating catalogue...', 'Preparing marketplace content...', 'Calculating pricing...']);
+    setLoadingStepIdx(0);
+    try {
+      // CATALOGUE: POST /products/:id/catalogue — NO body sent
+      // Backend uses stored product data. Response:
+      // { product_name, category, keywords[], description }
+      setLoadingStepIdx(0);
+      await new Promise(r => setTimeout(r, 600));
+      setLoadingStepIdx(1);
+      const catRes = await generateCatalogue(product.product_id);
+      setCatalogueResult(catRes);
+
+      setLoadingStepIdx(2);
+      await new Promise(r => setTimeout(r, 400));
+
+      // PRICE: GET /products/:id/price
+      // Response: { pricing: { estimated_cost, market_range_low, market_range_high,
+      //             recommended_price, confidence, reasoning[] } }
+      setLoadingStepIdx(3);
+      const priceRes = await getPrice(product.product_id);
+      setPriceResult(priceRes.pricing);
+
+      // Prefill editable review fields
+      setEditFields({
+        product_name: catRes.product_name || '',
+        category: catRes.category || '',
+        description: catRes.description || '',
+        material: voiceResult?.material || '',
+        craft_type: voiceResult?.craft_type || '',
+        production_time_days: voiceResult?.production?.time_days ?? '',
+        production_technique: voiceResult?.production?.technique || '',
+        recommended_price: priceRes.pricing?.recommended_price ?? '',
+        keywords: (catRes.keywords || []).join(', '),
+      });
+
+      setCurrentStep(3);
+      toast.success('Catalogue & pricing generated!');
+    } catch (err) {
+      toast.error(err.serverMessage || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Step 3: Review & Confirm ──────────────────────────────────────────
+
+  function handleFieldChange(field, value) {
+    setEditFields((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleConfirm() {
+    if (!product) return;
+    setLoading(true);
+    setLoadingMsg('Confirming your product...');
+    setLoadingSteps([]);
+    try {
+      // Build corrections object matching backend's expected structure
+      const corrections = {
+        product_name: editFields.product_name,
+        category: editFields.category,
+        description: editFields.description,
+        material: editFields.material,
+        craft_type: editFields.craft_type,
+        keywords: editFields.keywords
+          ? editFields.keywords.split(',').map((k) => k.trim()).filter(Boolean)
+          : [],
+        production: {
+          time_days: editFields.production_time_days ? Number(editFields.production_time_days) : undefined,
+          technique: editFields.production_technique || undefined,
+        },
+        pricing: {
+          recommended_price: editFields.recommended_price ? Number(editFields.recommended_price) : undefined,
+        },
+      };
+
+      // PUT /products/:id/confirm — response is full product with status: "confirmed"
+      const confirmed = await confirmProduct(product.product_id, corrections);
+      setProduct(confirmed);
+      setCurrentStep(4);
+      toast.success('Product confirmed! Ready to publish.');
+    } catch (err) {
+      toast.error(err.serverMessage || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Step 4: Publish ───────────────────────────────────────────────────
+
+  async function handlePublish() {
+    if (!product) return;
+    if (product.status !== 'confirmed') {
+      toast.error('Product must be confirmed before publishing.');
+      return;
+    }
+    setLoading(true);
+    setLoadingMsg('Publishing to marketplace...');
+    setLoadingSteps([]);
+    try {
+      // PUT /products/:id/publish — response: { status: "published" }
+      const res = await publishProduct(product.product_id);
+      setProduct((prev) => ({ ...prev, status: res.status }));
+      setPublishDone(true);
+      toast.success('🎉 Product published successfully!');
+    } catch (err) {
+      toast.error(err.serverMessage || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleExport() {
+    if (!product) return;
+    try {
+      const data = await exportProduct(product.product_id);
+      setExportJson(data);
+      setShowExport(true);
+    } catch (err) {
+      toast.error(err.serverMessage || err.message);
+    }
+  }
+
+  function copyExportJson() {
+    navigator.clipboard.writeText(JSON.stringify(exportJson, null, 2));
+    toast.success('Copied to clipboard!');
+  }
+
+  // ─── Render helpers ────────────────────────────────────────────────────
+
+  const resolvedOriginal = resolveImageUrl(imageResult?.original_url, BACKEND_ORIGIN);
+  const resolvedEnhanced = resolveImageUrl(imageResult?.enhanced_url, BACKEND_ORIGIN);
+
+  return (
+    <div className="page">
+      {loading && (
+        <LoadingOverlay
+          message={loadingMsg}
+          steps={loadingSteps}
+          currentStep={loadingStepIdx}
+        />
+      )}
+
+      {/* Step indicator */}
+      <div className="flow-steps">
+        {STEPS.map((s, i) => (
+          <div
+            key={s.id}
+            className={`flow-step ${i === currentStep ? 'active' : i < currentStep ? 'done' : ''}`}
+          >
+            <div className="flow-step-icon">
+              <s.icon size={14} />
+            </div>
+            <span className="flow-step-label">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ STEP 0: Photo Capture ═══ */}
+      {currentStep === 0 && (
+        <div className="flow-section animate-fade-in">
+          <h2 className="flow-title">
+            <Camera size={20} />
+            Capture Your Craft
+          </h2>
+          <p className="flow-desc">Take a photo or select from gallery</p>
+
+          <div className="photo-area">
+            {imagePreview ? (
+              <div className="photo-preview">
+                <img src={imagePreview} alt="Craft preview" />
+                <button className="photo-remove" onClick={() => {
+                  setImageFile(null);
+                  setImagePreview(null);
+                }}>
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <label className="photo-placeholder" htmlFor="photo-input">
+                <ImageIcon size={40} strokeWidth={1} />
+                <span>Tap to select photo</span>
+              </label>
+            )}
+            <input
+              id="photo-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+            />
+          </div>
+
+          {/* Language selector */}
+          <div style={{ marginTop: 'var(--space-md)' }}>
+            <label className="input-label">Your language</label>
+            <div className="lang-chips">
+              {LANGUAGES.map((l) => (
+                <button
+                  key={l.code}
+                  className={`chip ${language === l.code ? 'active' : ''}`}
+                  onClick={() => setLanguage(l.code)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            className="btn btn-primary btn-block btn-lg"
+            disabled={!imageFile}
+            onClick={handleUploadImage}
+            style={{ marginTop: 'var(--space-lg)' }}
+          >
+            <Upload size={18} /> Upload & Enhance
+          </button>
+        </div>
+      )}
+
+      {/* ═══ STEP 1: Voice Recording ═══ */}
+      {currentStep === 1 && (
+        <div className="flow-section animate-fade-in">
+          <h2 className="flow-title">
+            <Mic size={20} />
+            Describe Your Craft
+          </h2>
+          <p className="flow-desc">
+            Record a voice note in your language — describe materials, technique, and story
+          </p>
+
+          {/* Image comparison */}
+          {imageResult && (
+            <div className="image-compare card">
+              <div className="ic-row">
+                <div className="ic-item">
+                  <span className="ic-label">Original</span>
+                  {resolvedOriginal ? (
+                    <img src={resolvedOriginal} alt="Original" className="ic-img" />
+                  ) : (
+                    <div className="ic-placeholder skeleton" />
+                  )}
+                </div>
+                <div className="ic-item">
+                  <span className="ic-label">Enhanced</span>
+                  {resolvedEnhanced ? (
+                    <img src={resolvedEnhanced} alt="Enhanced" className="ic-img" />
+                  ) : (
+                    <div className="ic-placeholder skeleton" />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Audio recorder */}
+          <div className="recorder card">
+            <canvas ref={canvasRef} width={300} height={60} className="waveform-canvas" />
+
+            <div className="recorder-controls">
+              {!audioBlob ? (
+                <button
+                  className={`recorder-btn ${isRecording ? 'recording' : ''}`}
+                  onClick={isRecording ? stopRecording : startRecording}
+                >
+                  {isRecording ? <Square size={20} /> : <Mic size={20} />}
+                </button>
+              ) : (
+                <div className="recorder-playback">
+                  <audio src={audioUrl} controls className="audio-player" />
+                  <button className="btn btn-ghost btn-sm" onClick={resetRecording}>
+                    <RotateCcw size={14} /> Re-record
+                  </button>
+                </div>
+              )}
+              <p className="recorder-hint">
+                {isRecording ? 'Recording... tap to stop' : audioBlob ? 'Review your recording' : 'Tap to start recording'}
+              </p>
+            </div>
+          </div>
+
+          {/* Voice result preview */}
+          {voiceResult && (
+            <div className="voice-result card animate-fade-in">
+              <h4>Extracted Details</h4>
+              <div className="vr-tags">
+                <span className="badge badge-accent">{voiceResult.craft_type}</span>
+                <span className="badge badge-accent">{voiceResult.material}</span>
+                <span className="badge badge-accent">{voiceResult.production?.technique}</span>
+                <span className="badge badge-accent">{voiceResult.production?.time_days} days</span>
+              </div>
+              <p className="vr-desc">{voiceResult.description}</p>
+              <p className="vr-confidence">
+                Confidence: {Math.round(voiceResult.transcription_confidence * 100)}%
+              </p>
+            </div>
+          )}
+
+          <div className="flow-actions">
+            <button className="btn btn-ghost" onClick={() => setCurrentStep(0)}>
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={!audioBlob}
+              onClick={handleUploadVoice}
+            >
+              Process Voice <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STEP 2: Catalogue Generation ═══ */}
+      {currentStep === 2 && (
+        <div className="flow-section animate-fade-in">
+          <h2 className="flow-title">
+            <Sparkles size={20} />
+            AI Catalogue Generation
+          </h2>
+          <p className="flow-desc">
+            Generate SEO-optimized title, category, keywords, description, and pricing
+          </p>
+
+          <div className="gen-summary card">
+            <h4>Data collected so far</h4>
+            <div className="gen-items stagger">
+              <div className="gen-item animate-fade-in">
+                <Camera size={14} /> Photo uploaded & enhanced
+              </div>
+              {voiceResult && (
+                <>
+                  <div className="gen-item animate-fade-in">
+                    <Mic size={14} /> {voiceResult.craft_type} — {voiceResult.material}
+                  </div>
+                  <div className="gen-item animate-fade-in">
+                    <FileText size={14} /> {voiceResult.description?.slice(0, 80)}...
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <button
+            className="btn btn-primary btn-block btn-lg"
+            onClick={handleGenerateCatalogue}
+          >
+            <Sparkles size={18} /> Generate Catalogue & Pricing
+          </button>
+
+          <button className="btn btn-ghost" onClick={() => setCurrentStep(1)} style={{ marginTop: 8, width: '100%' }}>
+            <ArrowLeft size={16} /> Back to voice
+          </button>
+        </div>
+      )}
+
+      {/* ═══ STEP 3: Review & Confirm ═══ */}
+      {currentStep === 3 && (
+        <div className="flow-section animate-fade-in">
+          <div className="flow-title-row">
+            <h2 className="flow-title">
+              <CheckCircle size={20} />
+              Review & Confirm
+            </h2>
+            <StatusBadge status={product?.status} />
+          </div>
+          <p className="flow-desc">Review AI-generated fields and make corrections before confirming</p>
+
+          <div className="review-form">
+            <div className="rf-group">
+              <label className="input-label">Product Name</label>
+              <input
+                className="input-field"
+                value={editFields.product_name || ''}
+                onChange={(e) => handleFieldChange('product_name', e.target.value)}
+              />
+            </div>
+
+            <div className="rf-row">
+              <div className="rf-group" style={{ flex: 1 }}>
+                <label className="input-label">Category</label>
+                <input
+                  className="input-field"
+                  value={editFields.category || ''}
+                  onChange={(e) => handleFieldChange('category', e.target.value)}
+                />
+              </div>
+              <div className="rf-group" style={{ flex: 1 }}>
+                <label className="input-label">Craft Type</label>
+                <input
+                  className="input-field"
+                  value={editFields.craft_type || ''}
+                  onChange={(e) => handleFieldChange('craft_type', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="rf-group">
+              <label className="input-label">Material</label>
+              <input
+                className="input-field"
+                value={editFields.material || ''}
+                onChange={(e) => handleFieldChange('material', e.target.value)}
+              />
+            </div>
+
+            <div className="rf-row">
+              <div className="rf-group" style={{ flex: 1 }}>
+                <label className="input-label">Production Time (days)</label>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={editFields.production_time_days || ''}
+                  onChange={(e) => handleFieldChange('production_time_days', e.target.value)}
+                />
+              </div>
+              <div className="rf-group" style={{ flex: 1 }}>
+                <label className="input-label">Technique</label>
+                <input
+                  className="input-field"
+                  value={editFields.production_technique || ''}
+                  onChange={(e) => handleFieldChange('production_technique', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="rf-group">
+              <label className="input-label">Description</label>
+              <textarea
+                className="input-field"
+                rows={4}
+                value={editFields.description || ''}
+                onChange={(e) => handleFieldChange('description', e.target.value)}
+              />
+            </div>
+
+            <div className="rf-group">
+              <label className="input-label">Keywords (comma-separated)</label>
+              <input
+                className="input-field"
+                value={editFields.keywords || ''}
+                onChange={(e) => handleFieldChange('keywords', e.target.value)}
+                placeholder="madhubani, folk art, handmade"
+              />
+            </div>
+
+            {/* Pricing card */}
+            {priceResult && (
+              <div className="pricing-card card">
+                <h4><DollarSign size={16} /> AI Pricing Intelligence</h4>
+                <div className="pc-grid">
+                  <div className="pc-stat">
+                    <span className="pc-label">Est. Cost</span>
+                    <span className="pc-value">{formatPrice(priceResult.estimated_cost)}</span>
+                  </div>
+                  <div className="pc-stat">
+                    <span className="pc-label">Market Low</span>
+                    <span className="pc-value">{formatPrice(priceResult.market_range_low)}</span>
+                  </div>
+                  <div className="pc-stat">
+                    <span className="pc-label">Market High</span>
+                    <span className="pc-value">{formatPrice(priceResult.market_range_high)}</span>
+                  </div>
+                  <div className="pc-stat pc-stat-primary">
+                    <span className="pc-label">AI Recommended</span>
+                    <span className="pc-value">{formatPrice(priceResult.recommended_price)}</span>
+                  </div>
+                </div>
+
+                <div className="rf-group" style={{ marginTop: 'var(--space-md)' }}>
+                  <label className="input-label">Your Price (₹)</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    value={editFields.recommended_price || ''}
+                    onChange={(e) => handleFieldChange('recommended_price', e.target.value)}
+                  />
+                </div>
+
+                <div className="pc-reasoning">
+                  {priceResult.reasoning?.map((r, i) => (
+                    <p key={i} className="pc-reason">• {r}</p>
+                  ))}
+                </div>
+
+                <p className="pc-confidence">
+                  Confidence: {Math.round((priceResult.confidence || 0) * 100)}%
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flow-actions">
+            <button className="btn btn-ghost" onClick={() => setCurrentStep(2)}>
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button className="btn btn-primary" onClick={handleConfirm}>
+              <CheckCircle size={16} /> Confirm Product
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STEP 4: Publish ═══ */}
+      {currentStep === 4 && (
+        <div className="flow-section animate-fade-in">
+          <div className="flow-title-row">
+            <h2 className="flow-title">
+              <Send size={20} />
+              Publish Product
+            </h2>
+            <StatusBadge status={product?.status} />
+          </div>
+
+          {!publishDone ? (
+            <>
+              <div className="publish-preview card">
+                <h3>{editFields.product_name || product?.product_name}</h3>
+                <p className="publish-cat">{editFields.category || product?.category}</p>
+                <p className="publish-price">{formatPrice(editFields.recommended_price || product?.pricing?.recommended_price)}</p>
+                <p className="publish-desc">{(editFields.description || product?.description || '').slice(0, 150)}...</p>
+              </div>
+
+              {product?.status !== 'confirmed' && (
+                <div className="publish-warning">
+                  ⚠️ Product must be confirmed before it can be published.
+                  Status is currently: <strong>{product?.status}</strong>
+                </div>
+              )}
+
+              <button
+                className="btn btn-success btn-block btn-lg"
+                disabled={product?.status !== 'confirmed'}
+                onClick={handlePublish}
+              >
+                <Send size={18} /> Publish to Marketplace
+              </button>
+            </>
+          ) : (
+            <div className="publish-done animate-scale-in">
+              <div className="publish-done-icon">
+                <PartyPopper size={40} />
+              </div>
+              <h3>🎉 Published!</h3>
+              <p>Your craft is now live on the marketplace</p>
+              <div className="publish-done-actions">
+                <button className="btn btn-primary" onClick={handleExport}>
+                  <FileText size={16} /> Export JSON
+                </button>
+                <button className="btn btn-secondary" onClick={() => window.location.href = '/marketplace'}>
+                  <ShoppingBag size={16} /> View Marketplace
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Export modal */}
+      {showExport && exportJson && (
+        <div className="export-overlay" onClick={() => setShowExport(false)}>
+          <div className="export-modal glass-card animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="export-header">
+              <h3>Marketplace Export (ONDC/JSON)</h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowExport(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <pre className="export-code">{JSON.stringify(exportJson, null, 2)}</pre>
+            <button className="btn btn-primary btn-block" onClick={copyExportJson}>
+              <Copy size={16} /> Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
