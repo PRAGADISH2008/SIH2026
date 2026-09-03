@@ -1,0 +1,29 @@
+{
+  "product_id": "string",
+  "artisan_id": "string",
+  "product_name": "string",
+  "category": "string",
+  "craft_type": "string",
+  "material": "string",
+  "description": "string",
+  "language_original": "string",
+  "keywords": ["string"],
+  "images": {
+    "original_url": "string",
+    "enhanced_url": "string"
+  },
+  "production": {
+    "time_days": "number",
+    "technique": "string"
+  },
+  "pricing": {
+    "estimated_cost": "number",
+    "market_range_low": "number",
+    "market_range_high": "number",
+    "recommended_price": "number",
+    "confidence": "number",
+    "reasoning": ["string"]
+  },
+  "status": "draft | confirmed | published",
+  "created_at": "timestamp"
+}
