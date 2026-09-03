@@ -2,10 +2,12 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/auth');
 const errorResponse = require('../utils/errorResponse');
 const formatProduct = require('../utils/formatProduct');
+const { enhanceProductImage, analyzeProductImage, mimeToExtension } = require('../utils/geminiService');
 
 const router = express.Router();
 
@@ -119,7 +121,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 3. POST /products/:id/image — Upload & Enhance Image (auth required)
-//    Mock: saves file, returns original + mock enhanced URL.
+//    Sends uploaded image to Gemini (gemini-2.5-flash-image) for enhancement.
+//    Falls back to original image URL if Gemini fails.
 // ═════════════════════════════════════════════════════════════════════════════
 router.post('/:id/image', authMiddleware, upload.single('image'), async (req, res) => {
   try {
@@ -133,9 +136,35 @@ router.post('/:id/image', authMiddleware, upload.single('image'), async (req, re
     }
 
     const originalUrl = `/uploads/${req.file.filename}`;
-    // Mock: enhanced URL is the same file with a suffix in the name
-    const enhancedUrl = `/uploads/enhanced_${req.file.filename}`;
+    let enhancedUrl = originalUrl; // fallback: use original if enhancement fails
 
+    // ─── Gemini Image Enhancement ──────────────────────────────────────
+    try {
+      const imageBuffer = fs.readFileSync(req.file.path);
+      const result = await enhanceProductImage(imageBuffer, req.file.mimetype);
+
+      if (result && result.buffer && result.buffer.length > 0) {
+        // Determine file extension from the MIME type Gemini returned
+        const ext = mimeToExtension(result.mimeType);
+        const enhancedFilename = `enhanced_${uuidv4()}${ext}`;
+        const enhancedPath = path.join(__dirname, '..', 'uploads', enhancedFilename);
+
+        fs.writeFileSync(enhancedPath, result.buffer);
+        enhancedUrl = `/uploads/${enhancedFilename}`;
+        console.log(`✅ Enhanced image saved: ${enhancedUrl}`);
+      } else {
+        console.warn(
+          '⚠ Gemini image enhancement failed — original image used as enhanced_url fallback'
+        );
+      }
+    } catch (enhanceErr) {
+      console.warn(
+        '⚠ Gemini image enhancement failed — original image used as enhanced_url fallback:',
+        enhanceErr.message || enhanceErr
+      );
+    }
+
+    // ─── Update database ───────────────────────────────────────────────
     await pool.query(
       'UPDATE products SET images_original_url = $1, images_enhanced_url = $2 WHERE product_id = $3',
       [originalUrl, enhancedUrl, req.params.id]
@@ -207,7 +236,8 @@ router.post('/:id/voice', authMiddleware, upload.single('audio'), async (req, re
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 5. POST /products/:id/catalogue — Generate Catalogue Fields (auth required)
-//    Mock: returns realistic LLM-generated catalogue data.
+//    Uses Gemini Vision to analyze the product image and generate catalogue
+//    fields. Falls back to stored product data if no image or Gemini fails.
 // ═════════════════════════════════════════════════════════════════════════════
 router.post('/:id/catalogue', authMiddleware, async (req, res) => {
   try {
@@ -216,39 +246,104 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
       return errorResponse(res, 404, 'Product not found');
     }
 
-    // Mock LLM-generated catalogue fields
-    const mockCatalogue = {
-      product_name: 'Madhubani Fish & Lotus Painting — Bharni Style',
-      category: 'Paintings & Wall Art',
-      keywords: [
-        'madhubani',
-        'mithila art',
-        'bharni style',
-        'folk painting',
-        'natural dyes',
-        'handmade paper',
-        'indian handicraft',
-        'wall decor',
-        'traditional art',
-      ],
-      description: 'An exquisite Madhubani painting crafted in the traditional Bharni (filled) style on handmade paper. Featuring iconic fish and lotus motifs rendered with natural dyes and fine bamboo nib detailing, this piece embodies the rich artistic heritage of Mithila, Bihar. Each piece is one-of-a-kind, reflecting hours of meticulous handwork by a skilled artisan.',
+    let catalogueFields = null;
+
+    // ─── Attempt Gemini-powered catalogue generation from image ──────
+    const imageUrl = row.images_original_url;
+    if (imageUrl) {
+      try {
+        const imagePath = path.join(__dirname, '..', imageUrl);
+        if (fs.existsSync(imagePath)) {
+          const imageBuffer = fs.readFileSync(imagePath);
+          // Infer MIME type from extension
+          const ext = path.extname(imagePath).toLowerCase();
+          const mimeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
+          const mimeType = mimeMap[ext] || 'image/jpeg';
+
+          const analysis = await analyzeProductImage(imageBuffer, mimeType);
+
+          if (analysis) {
+            // Use Gemini to generate structured catalogue fields from the analysis
+            const { GoogleGenAI } = require('@google/genai');
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+            const structuredResponse = await ai.models.generateContent({
+              model: 'gemini-2.5-flash-image',
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text:
+                        'Based on the following analysis of an artisan handicraft product, generate catalogue fields in STRICT JSON format (no markdown, no code fences, no extra text).\n\n' +
+                        'Analysis:\n' + analysis + '\n\n' +
+                        'Return ONLY a JSON object with exactly these fields:\n' +
+                        '{\n' +
+                        '  "product_name": "A concise, marketable product title",\n' +
+                        '  "category": "A single product category",\n' +
+                        '  "keywords": ["array", "of", "search", "keywords"],\n' +
+                        '  "description": "A compelling product description for e-commerce"\n' +
+                        '}',
+                    },
+                  ],
+                },
+              ],
+              config: {
+                responseModalities: ['TEXT'],
+              },
+            });
+
+            const responseText = (structuredResponse.text || '').trim();
+            // Strip markdown code fences if present
+            const jsonStr = responseText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+
+            try {
+              catalogueFields = JSON.parse(jsonStr);
+              console.log('✅ Gemini catalogue generation succeeded');
+            } catch (parseErr) {
+              console.warn('⚠ Gemini returned non-JSON catalogue response:', responseText.substring(0, 200));
+            }
+          }
+        }
+      } catch (geminiErr) {
+        console.warn('⚠ Gemini catalogue generation failed:', geminiErr.message || geminiErr);
+      }
+    }
+
+    // ─── Fallback: use existing product data or sensible defaults ────
+    if (!catalogueFields) {
+      console.warn('⚠ Using fallback catalogue data (Gemini unavailable or no image)');
+      catalogueFields = {
+        product_name: row.product_name || row.craft_type || 'Artisan Handicraft Product',
+        category: row.category || 'Handicrafts',
+        keywords: row.keywords || ['handicraft', 'artisan', 'handmade'],
+        description: row.description || 'A beautifully handcrafted artisan product.',
+      };
+    }
+
+    // Ensure only the contract-defined fields are returned
+    const result = {
+      product_name: catalogueFields.product_name || 'Artisan Handicraft Product',
+      category: catalogueFields.category || 'Handicrafts',
+      keywords: Array.isArray(catalogueFields.keywords) ? catalogueFields.keywords : ['handicraft', 'artisan', 'handmade'],
+      description: catalogueFields.description || 'A beautifully handcrafted artisan product.',
     };
 
-    // Update the product
+    // Update the product in the database
     await pool.query(
       `UPDATE products
        SET product_name = $1, category = $2, keywords = $3, description = $4
        WHERE product_id = $5`,
       [
-        mockCatalogue.product_name,
-        mockCatalogue.category,
-        mockCatalogue.keywords,
-        mockCatalogue.description,
+        result.product_name,
+        result.category,
+        result.keywords,
+        result.description,
         req.params.id,
       ]
     );
 
-    res.status(200).json(mockCatalogue);
+    res.status(200).json(result);
   } catch (err) {
     console.error('Catalogue generation error:', err);
     return errorResponse(res, 500, 'Failed to generate catalogue fields');
