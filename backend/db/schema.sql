@@ -7,6 +7,18 @@ CREATE TABLE IF NOT EXISTS artisans (
   password_hash TEXT,
   display_name VARCHAR(100),
   mobile_number VARCHAR(20) UNIQUE,
+  region VARCHAR(150),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Users (Buyers) table
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY,
+  username VARCHAR(100) UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name VARCHAR(100),
+  mobile_number VARCHAR(20),
+  role VARCHAR(20) DEFAULT 'buyer',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

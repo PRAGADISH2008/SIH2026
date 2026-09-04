@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/auth');
+const requireRole = authMiddleware.requireRole;
 const errorResponse = require('../utils/errorResponse');
 const formatProduct = require('../utils/formatProduct');
 const {
@@ -36,7 +37,8 @@ async function getProductById(productId) {
     `SELECT p.*, 
             COALESCE(a.display_name, a.username, 'Master Artisan') AS artisan_name, 
             a.username AS artisan_username,
-            a.mobile_number AS artisan_phone
+            a.mobile_number AS artisan_phone,
+            a.region AS artisan_region
      FROM products p
      LEFT JOIN artisans a ON p.artisan_id = a.id
      WHERE p.product_id = $1`,
@@ -52,13 +54,14 @@ async function getProductById(productId) {
 // ═════════════════════════════════════════════════════════════════════════════
 router.get('/', async (req, res) => {
   try {
-    const { category, craft_type, min_price, max_price } = req.query;
+    const { category, craft_type, min_price, max_price, search } = req.query;
 
     let query = `
       SELECT p.*, 
              COALESCE(a.display_name, a.username, 'Master Artisan') AS artisan_name, 
              a.username AS artisan_username,
-             a.mobile_number AS artisan_phone
+             a.mobile_number AS artisan_phone,
+             a.region AS artisan_region
       FROM products p
       LEFT JOIN artisans a ON p.artisan_id = a.id
       WHERE p.status = $1
@@ -83,6 +86,26 @@ router.get('/', async (req, res) => {
       params.push(Number(max_price));
     }
 
+    // Parameterized search query across title, description, category, craft_type, material, artisan name, artisan region
+    if (search && typeof search === 'string' && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      const sParam = `$${paramIndex++}`;
+      query += ` AND (
+        p.product_name ILIKE ${sParam}
+        OR LOWER(p.product_name) LIKE LOWER(${sParam})
+        OR p.description ILIKE ${sParam}
+        OR LOWER(p.description) LIKE LOWER(${sParam})
+        OR p.category ILIKE ${sParam}
+        OR p.craft_type ILIKE ${sParam}
+        OR p.material ILIKE ${sParam}
+        OR COALESCE(a.display_name, a.username, '') ILIKE ${sParam}
+        OR LOWER(COALESCE(a.display_name, a.username, '')) LIKE LOWER(${sParam})
+        OR COALESCE(a.region, '') ILIKE ${sParam}
+        OR LOWER(COALESCE(a.region, '')) LIKE LOWER(${sParam})
+      )`;
+      params.push(searchTerm);
+    }
+
     query += ' ORDER BY p.created_at DESC';
 
     const result = await pool.query(query, params);
@@ -97,9 +120,9 @@ router.get('/', async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 1. POST /products — Create Draft Product (auth required)
+// 1. POST /products — Create Draft Product (artisan only)
 // ═════════════════════════════════════════════════════════════════════════════
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, requireRole('artisan'), async (req, res) => {
   try {
     const artisan_id = req.artisan_id;
     const { images, language_original } = req.body;
@@ -141,15 +164,18 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 3. POST /products/:id/image — Upload & Enhance Image (auth required)
-//    Sends uploaded image to Gemini (gemini-3.6-flash) for enhancement.
-//    Falls back to original image URL if Gemini fails.
+// 3. POST /products/:id/image — Upload & Enhance Image (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.post('/:id/image', authMiddleware, upload.single('image'), async (req, res) => {
+router.post('/:id/image', authMiddleware, requireRole('artisan'), upload.single('image'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
+    }
+
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
     }
 
     if (!req.file) {
@@ -165,7 +191,6 @@ router.post('/:id/image', authMiddleware, upload.single('image'), async (req, re
       const result = await enhanceProductImage(imageBuffer, req.file.mimetype);
 
       if (result && result.buffer && result.buffer.length > 0) {
-        // Determine file extension from the MIME type Gemini returned
         const ext = mimeToExtension(result.mimeType);
         const enhancedFilename = `enhanced_${uuidv4()}${ext}`;
         const enhancedPath = path.join(__dirname, '..', 'uploads', enhancedFilename);
@@ -204,19 +229,18 @@ router.post('/:id/image', authMiddleware, upload.single('image'), async (req, re
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 4. POST /products/:id/voice — Upload & Transcribe Voice (auth required)
-//    Pipeline:
-//      Audio upload (Multer)
-//      -> AssemblyAI (Speech-to-text transcription)
-//      -> Gemini (Product attribute & story extraction)
-//      -> PostgreSQL update
-//      -> Standard product response contract
+// 4. POST /products/:id/voice — Upload & Transcribe Voice (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.post('/:id/voice', authMiddleware, upload.single('audio'), async (req, res) => {
+router.post('/:id/voice', authMiddleware, requireRole('artisan'), upload.single('audio'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
+    }
+
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
     }
 
     if (!req.file) {
@@ -271,15 +295,18 @@ router.post('/:id/voice', authMiddleware, upload.single('audio'), async (req, re
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 5. POST /products/:id/catalogue — Generate Catalogue Fields (auth required)
-//    Uses Gemini Vision to analyze the product image and generate catalogue
-//    fields. Falls back to stored product data if no image or Gemini fails.
+// 5. POST /products/:id/catalogue — Generate Catalogue Fields (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.post('/:id/catalogue', authMiddleware, async (req, res) => {
+router.post('/:id/catalogue', authMiddleware, requireRole('artisan'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
+    }
+
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
     }
 
     let catalogueFields = null;
@@ -291,7 +318,6 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
         const imagePath = path.join(__dirname, '..', imageUrl);
         if (fs.existsSync(imagePath)) {
           const imageBuffer = fs.readFileSync(imagePath);
-          // Infer MIME type from extension
           const ext = path.extname(imagePath).toLowerCase();
           const mimeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
           const mimeType = mimeMap[ext] || 'image/jpeg';
@@ -299,7 +325,6 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
           const analysis = await analyzeProductImage(imageBuffer, mimeType);
 
           if (analysis) {
-            // Use Gemini to generate structured catalogue fields from the analysis
             const { GoogleGenAI } = require('@google/genai');
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -330,7 +355,6 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
             });
 
             const responseText = (structuredResponse.text || '').trim();
-            // Strip markdown code fences if present
             const jsonStr = responseText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
 
             try {
@@ -357,7 +381,6 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
       };
     }
 
-    // Ensure only the contract-defined fields are returned
     const result = {
       product_name: catalogueFields.product_name || 'Artisan Handicraft Product',
       category: catalogueFields.category || 'Handicrafts',
@@ -365,7 +388,6 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
       description: catalogueFields.description || 'A beautifully handcrafted artisan product.',
     };
 
-    // Update the product in the database
     await pool.query(
       `UPDATE products
        SET product_name = $1, category = $2, keywords = $3, description = $4
@@ -387,21 +409,23 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 6. GET /products/:id/price — Get Price Recommendation (auth required)
-//    Mock: returns realistic pricing data.
+// 6. GET /products/:id/price — Get Price Recommendation (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.get('/:id/price', authMiddleware, async (req, res) => {
+router.get('/:id/price', authMiddleware, requireRole('artisan'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
     }
 
-    // Generate dynamic AI Pricing Intelligence tailored specifically to this craft
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
+    }
+
     console.log(`🤖 [Pricing] Generating dynamic AI pricing for: ${row.product_name || row.craft_type || req.params.id}...`);
     const pricingData = await generatePricingIntelligence(row);
 
-    // Update the product with bespoke pricing data
     await pool.query(
       `UPDATE products
        SET pricing_estimated_cost = $1, pricing_market_range_low = $2,
@@ -428,17 +452,20 @@ router.get('/:id/price', authMiddleware, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 7. PUT /products/:id/confirm — Confirm Product (auth required)
-//    Merges corrected fields, sets status to "confirmed".
+// 7. PUT /products/:id/confirm — Confirm Product (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.put('/:id/confirm', authMiddleware, async (req, res) => {
+router.put('/:id/confirm', authMiddleware, requireRole('artisan'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
     }
 
-    // Build dynamic UPDATE from the request body
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
+    }
+
     const allowedFields = {
       product_name: 'product_name',
       category: 'category',
@@ -453,7 +480,6 @@ router.put('/:id/confirm', authMiddleware, async (req, res) => {
     const values = [];
     let paramIndex = 1;
 
-    // Handle flat fields
     for (const [jsonKey, dbColumn] of Object.entries(allowedFields)) {
       if (req.body[jsonKey] !== undefined) {
         setClauses.push(`${dbColumn} = $${paramIndex++}`);
@@ -461,7 +487,6 @@ router.put('/:id/confirm', authMiddleware, async (req, res) => {
       }
     }
 
-    // Handle nested pricing fields
     if (req.body.pricing) {
       const pricingMap = {
         estimated_cost: 'pricing_estimated_cost',
@@ -479,7 +504,6 @@ router.put('/:id/confirm', authMiddleware, async (req, res) => {
       }
     }
 
-    // Handle nested production fields
     if (req.body.production) {
       if (req.body.production.time_days !== undefined) {
         setClauses.push(`production_time_days = $${paramIndex++}`);
@@ -491,7 +515,6 @@ router.put('/:id/confirm', authMiddleware, async (req, res) => {
       }
     }
 
-    // Handle nested images fields
     if (req.body.images) {
       if (req.body.images.original_url !== undefined) {
         setClauses.push(`images_original_url = $${paramIndex++}`);
@@ -519,14 +542,18 @@ router.put('/:id/confirm', authMiddleware, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 8. PUT /products/:id/publish — Publish Product (auth required)
-//    REJECTS if status is not "confirmed".
+// 8. PUT /products/:id/publish — Publish Product (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.put('/:id/publish', authMiddleware, async (req, res) => {
+router.put('/:id/publish', authMiddleware, requireRole('artisan'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
+    }
+
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
     }
 
     if (row.status !== 'confirmed') {
@@ -550,14 +577,18 @@ router.put('/:id/publish', authMiddleware, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 10. GET /products/:id/export — Export Product (auth required)
-//     Returns full product formatted for marketplace export.
+// 10. GET /products/:id/export — Export Product (artisan only, ownership checked)
 // ═════════════════════════════════════════════════════════════════════════════
-router.get('/:id/export', authMiddleware, async (req, res) => {
+router.get('/:id/export', authMiddleware, requireRole('artisan'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
       return errorResponse(res, 404, 'Product not found');
+    }
+
+    // Ownership verification
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
     }
 
     res.status(200).json(formatProduct(row));

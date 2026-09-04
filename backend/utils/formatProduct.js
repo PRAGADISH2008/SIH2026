@@ -11,6 +11,7 @@ function formatProduct(row) {
     artisan_name: row.artisan_name || row.artisan_display_name || row.display_name || 'Master Artisan',
     artisan_username: row.artisan_username || row.username || null,
     artisan_phone: row.artisan_phone || row.mobile_number || null,
+    artisan_region: row.artisan_region || row.region || null,
     product_name: row.product_name || null,
     category: row.category || null,
     craft_type: row.craft_type || null,
