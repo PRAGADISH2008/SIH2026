@@ -84,8 +84,10 @@
   --duration-slow: 400ms;
 
   /* ─── Layout ───────────────────────────────────────────────────────── */
-  --max-width: 430px;
-  --nav-height: 56px;
+  --max-width: 1240px;
+  --max-width-content: 880px;
+  --max-width-card: 480px;
+  --nav-height: 64px;
   --bottom-nav-height: 64px;
 }
 
@@ -329,6 +331,22 @@ textarea.input-field {
   padding-bottom: calc(var(--bottom-nav-height) + var(--space-lg));
 }
 
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-lg) var(--space-xl);
+    padding-top: calc(var(--nav-height) + var(--space-lg));
+    padding-bottom: var(--space-2xl);
+  }
+
+  .page-title {
+    font-size: 2.25rem !important;
+  }
+
+  .page-subtitle {
+    font-size: 1rem !important;
+  }
+}
+
 .page-header {
   margin-bottom: var(--space-lg);
 }
@@ -473,7 +491,7 @@ textarea.input-field {
   flex-direction: column;
   gap: var(--space-sm);
   width: calc(100% - var(--space-md) * 2);
-  max-width: var(--max-width);
+  max-width: 420px;
   pointer-events: none;
 }
 

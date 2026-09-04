@@ -35,11 +35,14 @@ Edit `.env` with your values:
 | `PORT` | Server port (default: `5000`) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | Secret key for signing JWTs (any random string) |
-| `SMS_PROVIDER_SID` | Twilio Account SID (optional — falls back to console.log) |
+| `GEMINI_API_KEY` | Google Gemini API key (for image enhancement, vision analysis, & product attribute extraction) |
+| `ASSEMBLYAI_API_KEY` | AssemblyAI API key (for speech-to-text audio transcription) |
+| `FAST2SMS_API_KEY` | Fast2SMS API Key (preferred for Indian numbers — route: 'otp') |
+| `SMS_PROVIDER_SID` | Twilio Account SID (optional fallback) |
 | `SMS_PROVIDER_AUTH_TOKEN` | Twilio Auth Token |
 | `SMS_PROVIDER_FROM_NUMBER` | Twilio "From" phone number (e.g. `+1234567890`) |
 
-> **Note:** AI service keys (`GEMINI_API_KEY`, `BHASHINI_*`, `REMOVE_BG_API_KEY`) are not used yet — all AI calls return mock data.
+> **Note:** `GEMINI_API_KEY` is used for image enhancement, visual analysis, and AI attribute extraction. `ASSEMBLYAI_API_KEY` powers the voice transcription pipeline. SMS delivery supports Fast2SMS (for domestic Indian SMS) and Twilio, with automatic console fallback for development. Background removal and white background styling are handled natively by Gemini.
 
 ### 3. Create the database
 
@@ -99,9 +102,9 @@ Base URL: `http://localhost:5000/api/v1`
 |---|--------|----------|-------------|
 | 1 | POST | `/products` | Create a draft product |
 | 2 | GET | `/products/:id` | Get product by ID |
-| 3 | POST | `/products/:id/image` | Upload & enhance image (mock) |
-| 4 | POST | `/products/:id/voice` | Upload & transcribe voice (mock) |
-| 5 | POST | `/products/:id/catalogue` | Generate catalogue fields (mock) |
+| 3 | POST | `/products/:id/image` | Upload & enhance image (Gemini Vision) |
+| 4 | POST | `/products/:id/voice` | Upload & transcribe voice (AssemblyAI STT + Gemini) |
+| 5 | POST | `/products/:id/catalogue` | Generate catalogue fields (Gemini Vision) |
 | 6 | GET | `/products/:id/price` | Get price recommendation (mock) |
 | 7 | PUT | `/products/:id/confirm` | Confirm product (human-in-the-loop) |
 | 8 | PUT | `/products/:id/publish` | Publish product (rejects if not confirmed) |

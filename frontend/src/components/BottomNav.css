@@ -74,3 +74,10 @@
 .bottom-nav-capture span {
   margin-top: -2px;
 }
+
+/* Hide mobile bottom navigation on desktop/laptop where top navbar is used */
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none;
+  }
+}

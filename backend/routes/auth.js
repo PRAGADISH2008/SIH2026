@@ -3,145 +3,161 @@ const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const errorResponse = require('../utils/errorResponse');
+const { hashPassword, verifyPassword } = require('../utils/password');
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-/**
- * Generate a random 6-digit OTP.
- */
-function generateOTP() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-/**
- * Send OTP via Twilio if credentials are configured,
- * otherwise fall back to console.log.
- */
-async function sendOTP(mobileNumber, otpCode) {
-  const accountSid = process.env.SMS_PROVIDER_SID;
-  const authToken = process.env.SMS_PROVIDER_AUTH_TOKEN;
-  const fromNumber = process.env.SMS_PROVIDER_FROM_NUMBER;
-
-  if (accountSid && authToken && fromNumber) {
-    try {
-      const twilio = require('twilio');
-      const client = twilio(accountSid, authToken);
-
-      const message = await client.messages.create({
-        body: `Your Artisan Catalogue OTP is: ${otpCode}. Valid for 5 minutes.`,
-        from: fromNumber,
-        to: mobileNumber,
-      });
-
-      console.log(`[Twilio] SMS sent — SID: ${message.sid}`);
-      return { method: 'twilio', sid: message.sid };
-    } catch (err) {
-      console.error(`[Twilio] Failed to send SMS: ${err.message}`);
-      // Fall through to console log fallback
-    }
-  }
-
-  console.log(`[OTP Fallback] Mobile: ${mobileNumber} | OTP: ${otpCode}`);
-  return { method: 'console' };
-}
-
-// ─── POST /auth/otp/request ─────────────────────────────────────────────────
-router.post('/otp/request', async (req, res) => {
+// ─── POST /auth/register ──────────────────────────────────────────────────
+router.post('/register', async (req, res) => {
   try {
-    const { mobile_number } = req.body;
+    const { username, password, display_name, mobile_number } = req.body;
 
-    if (!mobile_number) {
-      return errorResponse(res, 400, 'mobile_number is required');
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      return errorResponse(res, 400, 'Username is required');
     }
 
-    const otpCode = generateOTP();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername.length < 3) {
+      return errorResponse(res, 400, 'Username must be at least 3 characters long');
+    }
 
-    // Delete any existing OTPs for this number
-    await pool.query('DELETE FROM otps WHERE mobile_number = $1', [mobile_number]);
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return errorResponse(res, 400, 'Password must be at least 6 characters long');
+    }
 
-    // Store the new OTP
-    await pool.query(
-      'INSERT INTO otps (mobile_number, otp_code, expires_at) VALUES ($1, $2, $3)',
-      [mobile_number, otpCode, expiresAt]
+    const cleanDisplayName = (display_name && typeof display_name === 'string')
+      ? display_name.trim()
+      : cleanUsername;
+
+    const cleanMobile = (mobile_number && typeof mobile_number === 'string' && mobile_number.trim())
+      ? mobile_number.trim()
+      : null;
+
+    // Check duplicate username
+    const existing = await pool.query(
+      'SELECT id FROM artisans WHERE LOWER(username) = $1',
+      [cleanUsername]
     );
 
-    // Send via Twilio or console
-    const delivery = await sendOTP(mobile_number, otpCode);
+    if (existing.rows.length > 0) {
+      return errorResponse(res, 409, 'Username already exists. Please choose a different username.');
+    }
 
-    res.status(200).json({
-      message: 'OTP sent successfully',
-      delivery_method: delivery.method,
+    // Hash password asynchronously with salt
+    const hashedPassword = await hashPassword(password);
+    const artisanId = uuidv4();
+
+    await pool.query(
+      `INSERT INTO artisans (id, username, password_hash, display_name, mobile_number)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [artisanId, cleanUsername, hashedPassword, cleanDisplayName, cleanMobile]
+    );
+
+    // Sign JWT with exact contract: { artisan_id }
+    const token = jwt.sign(
+      { artisan_id: artisanId },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      message: 'Registration successful',
+      token,
+      artisan: {
+        artisan_id: artisanId,
+        username: cleanUsername,
+        display_name: cleanDisplayName,
+        mobile_number: cleanMobile,
+      },
     });
   } catch (err) {
-    console.error('OTP request error:', err);
-    return errorResponse(res, 500, 'Failed to generate OTP');
+    console.error('Registration error:', err);
+    return errorResponse(res, 500, 'Failed to register artisan account');
   }
 });
 
-// ─── POST /auth/otp/verify ──────────────────────────────────────────────────
-router.post('/otp/verify', async (req, res) => {
+// ─── POST /auth/login ─────────────────────────────────────────────────────
+router.post('/login', async (req, res) => {
   try {
-    const { mobile_number, otp } = req.body;
+    const { username, password } = req.body;
 
-    if (!mobile_number || !otp) {
-      return errorResponse(res, 400, 'mobile_number and otp are required');
+    if (!username || !password) {
+      return errorResponse(res, 400, 'Username and password are required');
     }
 
-    // Look up the OTP
+    const cleanUsername = String(username).trim().toLowerCase();
+
+    // Look up artisan by username
     const result = await pool.query(
-      'SELECT * FROM otps WHERE mobile_number = $1 AND otp_code = $2 ORDER BY created_at DESC LIMIT 1',
-      [mobile_number, otp]
+      'SELECT id, username, password_hash, display_name, mobile_number FROM artisans WHERE LOWER(username) = $1',
+      [cleanUsername]
     );
 
     if (result.rows.length === 0) {
-      return errorResponse(res, 401, 'Invalid OTP');
+      return errorResponse(res, 401, 'Invalid username or password');
     }
 
-    const otpRecord = result.rows[0];
+    const artisan = result.rows[0];
 
-    // Check expiry
-    if (new Date() > new Date(otpRecord.expires_at)) {
-      // Clean up expired OTP
-      await pool.query('DELETE FROM otps WHERE id = $1', [otpRecord.id]);
-      return errorResponse(res, 401, 'OTP has expired');
+    if (!artisan.password_hash) {
+      return errorResponse(res, 401, 'Invalid username or password');
     }
 
-    // Delete the used OTP
-    await pool.query('DELETE FROM otps WHERE mobile_number = $1', [mobile_number]);
-
-    // Upsert the artisan
-    let artisanResult = await pool.query(
-      'SELECT id FROM artisans WHERE mobile_number = $1',
-      [mobile_number]
-    );
-
-    let artisan_id;
-    if (artisanResult.rows.length === 0) {
-      artisan_id = uuidv4();
-      await pool.query(
-        'INSERT INTO artisans (id, mobile_number) VALUES ($1, $2)',
-        [artisan_id, mobile_number]
-      );
-    } else {
-      artisan_id = artisanResult.rows[0].id;
+    // Verify password securely with scrypt
+    const isMatch = await verifyPassword(password, artisan.password_hash);
+    if (!isMatch) {
+      return errorResponse(res, 401, 'Invalid username or password');
     }
 
-    // Issue JWT
+    // Sign JWT with exact contract: { artisan_id }
     const token = jwt.sign(
-      { artisan_id },
+      { artisan_id: artisan.id },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.status(200).json({
-      message: 'OTP verified successfully',
+      message: 'Login successful',
       token,
-      artisan_id,
+      artisan: {
+        artisan_id: artisan.id,
+        username: artisan.username,
+        display_name: artisan.display_name || artisan.username,
+        mobile_number: artisan.mobile_number || null,
+      },
     });
   } catch (err) {
-    console.error('OTP verify error:', err);
-    return errorResponse(res, 500, 'Failed to verify OTP');
+    console.error('Login error:', err);
+    return errorResponse(res, 500, 'Failed to process login');
+  }
+});
+
+// ─── GET /auth/me ─────────────────────────────────────────────────────────
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, username, display_name, mobile_number, created_at FROM artisans WHERE id = $1',
+      [req.artisan_id]
+    );
+
+    if (result.rows.length === 0) {
+      return errorResponse(res, 404, 'Artisan not found');
+    }
+
+    const artisan = result.rows[0];
+    res.status(200).json({
+      artisan: {
+        artisan_id: artisan.id,
+        username: artisan.username || 'artisan',
+        display_name: artisan.display_name || artisan.username || 'Artisan',
+        mobile_number: artisan.mobile_number || null,
+        created_at: artisan.created_at,
+      },
+    });
+  } catch (err) {
+    console.error('Fetch profile error:', err);
+    return errorResponse(res, 500, 'Failed to fetch artisan profile');
   }
 });
 

@@ -29,9 +29,11 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/products', productRoutes);
 
 // ─── Health check ───────────────────────────────────────────────────────────
-app.get('/api/v1/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+const handleHealth = (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+};
+app.get('/health', handleHealth);
+app.get('/api/v1/health', handleHealth);
 
 // ─── 404 fallback ───────────────────────────────────────────────────────────
 app.use((req, res) => {

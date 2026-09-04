@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Camera, Mic, MicOff, Sparkles, DollarSign, CheckCircle,
   Send, ArrowRight, ArrowLeft, Image as ImageIcon, Upload,
-  Play, Square, RotateCcw, FileText, PartyPopper, Copy, X
+  Play, Square, RotateCcw, FileText, PartyPopper, Copy, X,
+  ShoppingBag, LayoutGrid
 } from 'lucide-react';
 import {
   createDraftProduct, uploadImage, uploadVoice,
@@ -24,15 +26,19 @@ const STEPS = [
 ];
 
 const LANGUAGES = [
-  { code: 'hi', label: 'हिन्दी' },
-  { code: 'ta', label: 'தமிழ்' },
-  { code: 'bn', label: 'বাংলা' },
-  { code: 'mr', label: 'मराठी' },
-  { code: 'te', label: 'తెలుగు' },
+  { code: 'auto', label: '🌐 Auto-Detect' },
+  { code: 'hi', label: 'हिन्दी (Hindi)' },
+  { code: 'ta', label: 'தமிழ் (Tamil)' },
+  { code: 'te', label: 'తెలుగు (Telugu)' },
+  { code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
+  { code: 'ml', label: 'മലയാളം (Malayalam)' },
+  { code: 'mr', label: 'मराठी (Marathi)' },
+  { code: 'bn', label: 'বাংলা (Bengali)' },
   { code: 'en', label: 'English' },
 ];
 
 export default function CaptureFlow({ toast }) {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -45,8 +51,12 @@ export default function CaptureFlow({ toast }) {
   const [imagePreview, setImagePreview] = useState(null);
   const [imageResult, setImageResult] = useState(null);
 
+  // Resolved image URLs for preview and comparison
+  const resolvedOriginal = resolveImageUrl(imageResult?.original_url || product?.images?.original_url, BACKEND_ORIGIN) || imagePreview;
+  const resolvedEnhanced = resolveImageUrl(imageResult?.enhanced_url || product?.images?.enhanced_url, BACKEND_ORIGIN) || imagePreview;
+
   // Voice state
-  const [language, setLanguage] = useState('hi');
+  const [language, setLanguage] = useState('auto');
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
@@ -193,7 +203,7 @@ export default function CaptureFlow({ toast }) {
     try {
       const audioFile = new File([audioBlob], 'voice.webm', { type: 'audio/webm' });
       setLoadingStepIdx(1);
-      const res = await uploadVoice(product.product_id, audioFile);
+      const res = await uploadVoice(product.product_id, audioFile, language);
       // Response: { description, language_original, material, craft_type,
       //             production: { time_days, technique }, transcription_confidence }
       setVoiceResult(res);
@@ -233,7 +243,16 @@ export default function CaptureFlow({ toast }) {
       // Response: { pricing: { estimated_cost, market_range_low, market_range_high,
       //             recommended_price, confidence, reasoning[] } }
       setLoadingStepIdx(3);
-      const priceRes = await getPrice(product.product_id);
+      const priceRes = await getPrice(product.product_id, {
+        ...catRes,
+        ...voiceResult,
+        product_name: catRes?.product_name || product?.product_name,
+        category: catRes?.category || product?.category,
+        craft_type: voiceResult?.craft_type || product?.craft_type,
+        material: voiceResult?.material || product?.material,
+        production_time_days: voiceResult?.production?.time_days,
+        production_technique: voiceResult?.production?.technique,
+      });
       setPriceResult(priceRes.pricing);
 
       // Prefill editable review fields
@@ -286,6 +305,8 @@ export default function CaptureFlow({ toast }) {
         },
         pricing: {
           recommended_price: editFields.recommended_price ? Number(editFields.recommended_price) : undefined,
+          estimated_cost: dynamicPricing?.currentEstCost,
+          confidence: dynamicPricing ? dynamicPricing.dynamicConfidence / 100 : undefined,
         },
       };
 
@@ -317,7 +338,18 @@ export default function CaptureFlow({ toast }) {
       const res = await publishProduct(product.product_id);
       setProduct((prev) => ({ ...prev, status: res.status }));
       setPublishDone(true);
-      toast.success('🎉 Product published successfully!');
+      toast.success('🎉 Product published successfully to the marketplace!');
+
+      // Smoothly navigate directly to marketplace after publishing
+      setTimeout(() => {
+        navigate('/marketplace', {
+          state: {
+            justPublished: true,
+            productId: product.product_id,
+            productName: editFields.product_name || product?.product_name || 'Your Craft'
+          }
+        });
+      }, 1000);
     } catch (err) {
       toast.error(err.serverMessage || err.message);
     } finally {
@@ -341,10 +373,76 @@ export default function CaptureFlow({ toast }) {
     toast.success('Copied to clipboard!');
   }
 
-  // ─── Render helpers ────────────────────────────────────────────────────
+  // Dynamic pricing & confidence recalculation based on user price and production days
+  const dynamicPricing = (() => {
+    if (!priceResult) return null;
 
-  const resolvedOriginal = resolveImageUrl(imageResult?.original_url, BACKEND_ORIGIN);
-  const resolvedEnhanced = resolveImageUrl(imageResult?.enhanced_url, BACKEND_ORIGIN);
+    const baseCost = Number(priceResult.estimated_cost) || 1000;
+    const baseDays = Math.max(1, Number(product?.production_time_days || voiceResult?.production?.time_days || 3));
+    const userDays = Number(editFields.production_time_days) > 0 ? Number(editFields.production_time_days) : baseDays;
+
+    // Daily artisan labor rate (~₹250/day)
+    const laborRatePerDay = 250;
+    const daysDiff = userDays - baseDays;
+    const currentEstCost = Math.max(150, Math.round(baseCost + (daysDiff * laborRatePerDay)));
+
+    const low = Number(priceResult.market_range_low) || Math.round(currentEstCost * 1.5);
+    const high = Number(priceResult.market_range_high) || Math.round(currentEstCost * 3.5);
+    const rec = Number(priceResult.recommended_price) || Math.round(currentEstCost * 2.2);
+
+    const userPrice = Number(editFields.recommended_price) > 0 ? Number(editFields.recommended_price) : rec;
+
+    // Calculate dynamic confidence score reflecting market sell-through rate and feasibility
+    let dynamicConfidence = 88;
+    let feedback = 'Optimal market pricing';
+    let statusLevel = 'success'; // 'success' | 'warning' | 'danger'
+
+    if (userPrice < currentEstCost) {
+      // Selling below cost: high loss risk
+      const ratio = userPrice / currentEstCost;
+      dynamicConfidence = Math.max(35, Math.min(55, Math.round(ratio * 50)));
+      feedback = `⚠️ Below estimated cost (₹${currentEstCost.toLocaleString('en-IN')}) — Risk of financial loss!`;
+      statusLevel = 'danger';
+    } else if (userPrice < low) {
+      // Below market low
+      const ratio = (userPrice - currentEstCost) / (low - currentEstCost || 1);
+      dynamicConfidence = Math.max(60, Math.min(78, Math.round(60 + ratio * 18)));
+      feedback = '⚠️ Below market entry range — High buyer interest, but artisan profit is compromised.';
+      statusLevel = 'warning';
+    } else if (userPrice >= low && userPrice <= high) {
+      // Within healthy market range
+      const distFromRec = Math.abs(userPrice - rec) / (high - low || 1);
+      dynamicConfidence = Math.max(82, Math.min(96, Math.round(95 - (distFromRec * 13))));
+      if (Math.abs(userPrice - rec) <= (rec * 0.08)) {
+        feedback = '🎯 Optimal Sweet Spot — Highest probability of rapid sales & strong profit margin.';
+      } else if (userPrice > rec) {
+        feedback = '📈 Premium Boutique Range — Maximizes revenue per piece with steady buyer conversion.';
+      } else {
+        feedback = '⚡ Competitive Value Range — Accelerates initial sales and marketplace ranking.';
+      }
+      statusLevel = 'success';
+    } else {
+      // Above market high
+      const overRatio = (userPrice - high) / (high || 1);
+      dynamicConfidence = Math.max(38, Math.min(74, Math.round(75 - (overRatio * 50))));
+      feedback = '⚠️ Above premium market range — Increased buyer hesitation and price sensitivity.';
+      statusLevel = 'warning';
+    }
+
+    const profit = userPrice - currentEstCost;
+    const profitMargin = userPrice > 0 ? Math.round((profit / userPrice) * 100) : 0;
+
+    return {
+      currentEstCost,
+      userPrice,
+      dynamicConfidence,
+      feedback,
+      statusLevel,
+      profit,
+      profitMargin,
+      userDays,
+    };
+  })();
 
   return (
     <div className="page">
@@ -373,7 +471,7 @@ export default function CaptureFlow({ toast }) {
 
       {/* ═══ STEP 0: Photo Capture ═══ */}
       {currentStep === 0 && (
-        <div className="flow-section animate-fade-in">
+        <div className="flow-section photo-step-container animate-fade-in">
           <h2 className="flow-title">
             <Camera size={20} />
             Capture Your Craft
@@ -414,6 +512,7 @@ export default function CaptureFlow({ toast }) {
               {LANGUAGES.map((l) => (
                 <button
                   key={l.code}
+                  type="button"
                   className={`chip ${language === l.code ? 'active' : ''}`}
                   onClick={() => setLanguage(l.code)}
                 >
@@ -436,14 +535,41 @@ export default function CaptureFlow({ toast }) {
 
       {/* ═══ STEP 1: Voice Recording ═══ */}
       {currentStep === 1 && (
-        <div className="flow-section animate-fade-in">
+        <div className="flow-section voice-step-container animate-fade-in">
           <h2 className="flow-title">
             <Mic size={20} />
             Describe Your Craft
           </h2>
           <p className="flow-desc">
-            Record a voice note in your language — describe materials, technique, and story
+            Record a voice note in your native language — describe materials, technique, and story.
           </p>
+
+          {/* Spoken Language Selector */}
+          <div className="card voice-lang-card" style={{ marginBottom: 'var(--space-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <label className="input-label" style={{ margin: 0, fontWeight: 600 }}>
+                Spoken Language
+              </label>
+              <span className="badge badge-accent" style={{ fontSize: '0.72rem' }}>
+                AssemblyAI + Gemini Multilingual
+              </span>
+            </div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--clr-text-secondary)', margin: '0 0 10px' }}>
+              Select the language you will speak in. AssemblyAI transcribes your dialect accurately and Gemini translates & normalizes it into professional e-commerce product attributes.
+            </p>
+            <div className="lang-chips">
+              {LANGUAGES.map((l) => (
+                <button
+                  key={l.code}
+                  type="button"
+                  className={`chip ${language === l.code ? 'active' : ''}`}
+                  onClick={() => setLanguage(l.code)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Image comparison */}
           {imageResult && (
@@ -529,7 +655,7 @@ export default function CaptureFlow({ toast }) {
 
       {/* ═══ STEP 2: Catalogue Generation ═══ */}
       {currentStep === 2 && (
-        <div className="flow-section animate-fade-in">
+        <div className="flow-section catalogue-step-container animate-fade-in">
           <h2 className="flow-title">
             <Sparkles size={20} />
             AI Catalogue Generation
@@ -582,128 +708,214 @@ export default function CaptureFlow({ toast }) {
           </div>
           <p className="flow-desc">Review AI-generated fields and make corrections before confirming</p>
 
-          <div className="review-form">
-            <div className="rf-group">
-              <label className="input-label">Product Name</label>
-              <input
-                className="input-field"
-                value={editFields.product_name || ''}
-                onChange={(e) => handleFieldChange('product_name', e.target.value)}
-              />
-            </div>
+          <div className="review-grid-layout">
+            {/* Left Column: Craft Details Form */}
+            <div className="review-col-details card">
+              <h3 className="review-col-heading">Craft Information</h3>
 
-            <div className="rf-row">
-              <div className="rf-group" style={{ flex: 1 }}>
-                <label className="input-label">Category</label>
+              <div className="rf-group">
+                <label className="input-label">Product Name</label>
                 <input
                   className="input-field"
-                  value={editFields.category || ''}
-                  onChange={(e) => handleFieldChange('category', e.target.value)}
+                  value={editFields.product_name || ''}
+                  onChange={(e) => handleFieldChange('product_name', e.target.value)}
                 />
               </div>
-              <div className="rf-group" style={{ flex: 1 }}>
-                <label className="input-label">Craft Type</label>
-                <input
-                  className="input-field"
-                  value={editFields.craft_type || ''}
-                  onChange={(e) => handleFieldChange('craft_type', e.target.value)}
-                />
-              </div>
-            </div>
 
-            <div className="rf-group">
-              <label className="input-label">Material</label>
-              <input
-                className="input-field"
-                value={editFields.material || ''}
-                onChange={(e) => handleFieldChange('material', e.target.value)}
-              />
-            </div>
-
-            <div className="rf-row">
-              <div className="rf-group" style={{ flex: 1 }}>
-                <label className="input-label">Production Time (days)</label>
-                <input
-                  type="number"
-                  className="input-field"
-                  value={editFields.production_time_days || ''}
-                  onChange={(e) => handleFieldChange('production_time_days', e.target.value)}
-                />
-              </div>
-              <div className="rf-group" style={{ flex: 1 }}>
-                <label className="input-label">Technique</label>
-                <input
-                  className="input-field"
-                  value={editFields.production_technique || ''}
-                  onChange={(e) => handleFieldChange('production_technique', e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="rf-group">
-              <label className="input-label">Description</label>
-              <textarea
-                className="input-field"
-                rows={4}
-                value={editFields.description || ''}
-                onChange={(e) => handleFieldChange('description', e.target.value)}
-              />
-            </div>
-
-            <div className="rf-group">
-              <label className="input-label">Keywords (comma-separated)</label>
-              <input
-                className="input-field"
-                value={editFields.keywords || ''}
-                onChange={(e) => handleFieldChange('keywords', e.target.value)}
-                placeholder="madhubani, folk art, handmade"
-              />
-            </div>
-
-            {/* Pricing card */}
-            {priceResult && (
-              <div className="pricing-card card">
-                <h4><DollarSign size={16} /> AI Pricing Intelligence</h4>
-                <div className="pc-grid">
-                  <div className="pc-stat">
-                    <span className="pc-label">Est. Cost</span>
-                    <span className="pc-value">{formatPrice(priceResult.estimated_cost)}</span>
-                  </div>
-                  <div className="pc-stat">
-                    <span className="pc-label">Market Low</span>
-                    <span className="pc-value">{formatPrice(priceResult.market_range_low)}</span>
-                  </div>
-                  <div className="pc-stat">
-                    <span className="pc-label">Market High</span>
-                    <span className="pc-value">{formatPrice(priceResult.market_range_high)}</span>
-                  </div>
-                  <div className="pc-stat pc-stat-primary">
-                    <span className="pc-label">AI Recommended</span>
-                    <span className="pc-value">{formatPrice(priceResult.recommended_price)}</span>
-                  </div>
+              <div className="rf-row">
+                <div className="rf-group" style={{ flex: 1 }}>
+                  <label className="input-label">Category</label>
+                  <input
+                    className="input-field"
+                    value={editFields.category || ''}
+                    onChange={(e) => handleFieldChange('category', e.target.value)}
+                  />
                 </div>
+                <div className="rf-group" style={{ flex: 1 }}>
+                  <label className="input-label">Craft Type</label>
+                  <input
+                    className="input-field"
+                    value={editFields.craft_type || ''}
+                    onChange={(e) => handleFieldChange('craft_type', e.target.value)}
+                  />
+                </div>
+              </div>
 
-                <div className="rf-group" style={{ marginTop: 'var(--space-md)' }}>
-                  <label className="input-label">Your Price (₹)</label>
+              <div className="rf-group">
+                <label className="input-label">Material</label>
+                <input
+                  className="input-field"
+                  value={editFields.material || ''}
+                  onChange={(e) => handleFieldChange('material', e.target.value)}
+                />
+              </div>
+
+              <div className="rf-row">
+                <div className="rf-group" style={{ flex: 1 }}>
+                  <label className="input-label">Production Time (days)</label>
                   <input
                     type="number"
                     className="input-field"
-                    value={editFields.recommended_price || ''}
-                    onChange={(e) => handleFieldChange('recommended_price', e.target.value)}
+                    value={editFields.production_time_days || ''}
+                    onChange={(e) => handleFieldChange('production_time_days', e.target.value)}
                   />
                 </div>
-
-                <div className="pc-reasoning">
-                  {priceResult.reasoning?.map((r, i) => (
-                    <p key={i} className="pc-reason">• {r}</p>
-                  ))}
+                <div className="rf-group" style={{ flex: 1 }}>
+                  <label className="input-label">Technique</label>
+                  <input
+                    className="input-field"
+                    value={editFields.production_technique || ''}
+                    onChange={(e) => handleFieldChange('production_technique', e.target.value)}
+                  />
                 </div>
-
-                <p className="pc-confidence">
-                  Confidence: {Math.round((priceResult.confidence || 0) * 100)}%
-                </p>
               </div>
-            )}
+
+              <div className="rf-group">
+                <label className="input-label">Description</label>
+                <textarea
+                  className="input-field"
+                  rows={4}
+                  value={editFields.description || ''}
+                  onChange={(e) => handleFieldChange('description', e.target.value)}
+                />
+              </div>
+
+              <div className="rf-group">
+                <label className="input-label">Keywords (comma-separated)</label>
+                <input
+                  className="input-field"
+                  value={editFields.keywords || ''}
+                  onChange={(e) => handleFieldChange('keywords', e.target.value)}
+                  placeholder="madhubani, folk art, handmade"
+                />
+              </div>
+            </div>
+
+            {/* Right Column: AI Pricing Intelligence */}
+            <div className="review-col-pricing">
+              {priceResult && dynamicPricing ? (
+                <div className="pricing-card card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                    <h4 style={{ margin: 0 }}><DollarSign size={16} /> AI Pricing Intelligence</h4>
+                    <span
+                      className={`badge badge-${dynamicPricing.statusLevel === 'success' ? 'published' : dynamicPricing.statusLevel === 'warning' ? 'confirmed' : 'draft'}`}
+                      style={{ fontSize: '0.75rem', padding: '3px 10px' }}
+                    >
+                      Est. Margin: {dynamicPricing.profitMargin}% (₹{dynamicPricing.profit.toLocaleString('en-IN')})
+                    </span>
+                  </div>
+
+                  <div className="pc-grid">
+                    <div className="pc-stat" title={`Dynamically calculated for ${dynamicPricing.userDays} days of artisan production`}>
+                      <span className="pc-label">Est. Cost {dynamicPricing.userDays ? `(${dynamicPricing.userDays}d)` : ''}</span>
+                      <span className="pc-value">{formatPrice(dynamicPricing.currentEstCost)}</span>
+                    </div>
+                    <div className="pc-stat">
+                      <span className="pc-label">Market Low</span>
+                      <span className="pc-value">{formatPrice(priceResult.market_range_low)}</span>
+                    </div>
+                    <div className="pc-stat">
+                      <span className="pc-label">Market High</span>
+                      <span className="pc-value">{formatPrice(priceResult.market_range_high)}</span>
+                    </div>
+                    <div className="pc-stat pc-stat-primary">
+                      <span className="pc-label">AI Recommended</span>
+                      <span className="pc-value">{formatPrice(priceResult.recommended_price)}</span>
+                    </div>
+                  </div>
+
+                  <div className="rf-group" style={{ marginTop: 'var(--space-md)' }}>
+                    <label className="input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Your Price (₹)</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--clr-text-muted)', fontWeight: 400 }}>
+                        Recalculates confidence in real-time
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      className="input-field"
+                      value={editFields.recommended_price || ''}
+                      onChange={(e) => handleFieldChange('recommended_price', e.target.value)}
+                    />
+                  </div>
+
+                  {/* Real-time Dynamic Sell-Through Confidence Meter */}
+                  <div
+                    className="animate-fade-in"
+                    style={{
+                      background: dynamicPricing.statusLevel === 'success'
+                        ? 'rgba(34, 197, 94, 0.08)'
+                        : dynamicPricing.statusLevel === 'warning'
+                        ? 'rgba(245, 158, 11, 0.1)'
+                        : 'rgba(239, 68, 68, 0.12)',
+                      border: `1px solid ${
+                        dynamicPricing.statusLevel === 'success'
+                          ? 'rgba(34, 197, 94, 0.3)'
+                          : dynamicPricing.statusLevel === 'warning'
+                          ? 'rgba(245, 158, 11, 0.35)'
+                          : 'rgba(239, 68, 68, 0.4)'
+                      }`,
+                      borderRadius: '10px',
+                      padding: '10px 14px',
+                      marginTop: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--clr-text-primary)' }}>
+                        Market Sell-Through Confidence
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.88rem',
+                          fontWeight: 700,
+                          color: dynamicPricing.statusLevel === 'success'
+                            ? 'var(--clr-success, #22c55e)'
+                            : dynamicPricing.statusLevel === 'warning'
+                            ? '#f59e0b'
+                            : '#ef4444',
+                        }}
+                      >
+                        {dynamicPricing.dynamicConfidence}%
+                      </span>
+                    </div>
+
+                    {/* Meter bar */}
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: `${dynamicPricing.dynamicConfidence}%`,
+                          height: '100%',
+                          background: dynamicPricing.statusLevel === 'success'
+                            ? 'var(--clr-success, #22c55e)'
+                            : dynamicPricing.statusLevel === 'warning'
+                            ? '#f59e0b'
+                            : '#ef4444',
+                          transition: 'width 0.3s ease, background 0.3s ease',
+                        }}
+                      />
+                    </div>
+
+                    <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--clr-text-secondary)', lineHeight: 1.4 }}>
+                      {dynamicPricing.feedback}
+                    </p>
+                  </div>
+
+                  <div className="pc-reasoning">
+                    {priceResult.reasoning?.map((r, i) => (
+                      <p key={i} className="pc-reason">• {r}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="pricing-card card" style={{ textAlign: 'center', padding: 'var(--space-xl) var(--space-md)' }}>
+                  <DollarSign size={28} style={{ color: 'var(--clr-accent)', margin: '0 auto var(--space-sm)' }} />
+                  <h4 style={{ justifyContent: 'center' }}>AI Pricing Intelligence</h4>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--clr-text-secondary)' }}>
+                    Pricing recommendations will be generated based on materials and labor time.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flow-actions">
@@ -757,14 +969,29 @@ export default function CaptureFlow({ toast }) {
               <div className="publish-done-icon">
                 <PartyPopper size={40} />
               </div>
-              <h3>🎉 Published!</h3>
-              <p>Your craft is now live on the marketplace</p>
-              <div className="publish-done-actions">
-                <button className="btn btn-primary" onClick={handleExport}>
-                  <FileText size={16} /> Export JSON
-                </button>
-                <button className="btn btn-secondary" onClick={() => window.location.href = '/marketplace'}>
+              <h3>🎉 Published Successfully!</h3>
+              <p>Your craft is now live on the marketplace. Moving to Marketplace...</p>
+              <div className="publish-done-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => navigate('/marketplace', {
+                    state: {
+                      justPublished: true,
+                      productId: product?.product_id,
+                      productName: editFields.product_name || product?.product_name
+                    }
+                  })}
+                >
                   <ShoppingBag size={16} /> View Marketplace
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => navigate('/dashboard')}
+                >
+                  <LayoutGrid size={16} /> Artisan Studio
+                </button>
+                <button className="btn btn-ghost" onClick={handleExport}>
+                  <FileText size={16} /> Export JSON
                 </button>
               </div>
             </div>

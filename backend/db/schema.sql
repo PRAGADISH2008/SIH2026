@@ -3,7 +3,10 @@
 -- Artisans table
 CREATE TABLE IF NOT EXISTS artisans (
   id UUID PRIMARY KEY,
-  mobile_number VARCHAR(20) UNIQUE NOT NULL,
+  username VARCHAR(100) UNIQUE,
+  password_hash TEXT,
+  display_name VARCHAR(100),
+  mobile_number VARCHAR(20) UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -1,15 +1,25 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { listProducts, exportProduct } from '../services/api';
 import { BACKEND_ORIGIN } from '../config';
 import { resolveImageUrl, formatPrice } from '../utils/helpers';
 import StatusBadge from '../components/StatusBadge';
+import { useAuth } from '../context/AuthContext';
 import {
   Search, Filter, ShoppingBag, Star, X, Copy,
-  ChevronDown, Tag, Clock, FileText, Sparkles
+  ChevronDown, Tag, Clock, FileText, Sparkles, LayoutGrid, PlusCircle, CheckCircle2,
+  Phone, MessageSquare
 } from 'lucide-react';
 import './BuyerMarketplace.css';
 
 export default function BuyerMarketplace({ toast }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const justPublished = location.state?.justPublished;
+  const publishedName = location.state?.productName;
+  const [bannerVisible, setBannerVisible] = useState(Boolean(justPublished));
+
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -77,16 +87,108 @@ export default function BuyerMarketplace({ toast }) {
         <p className="page-subtitle">Authentic handcrafted treasures from Indian artisans</p>
       </div>
 
-      {/* Filter bar */}
-      <div className="market-toolbar animate-fade-in">
-        <button
-          className={`btn btn-secondary btn-sm ${showFilters ? 'active' : ''}`}
-          onClick={() => setShowFilters(!showFilters)}
+      {/* Success banner after artisan publishing */}
+      {bannerVisible && (
+        <div
+          className="card animate-scale-in"
+          style={{
+            background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(16, 185, 129, 0.08))',
+            border: '1px solid rgba(34, 197, 94, 0.4)',
+            padding: '16px 20px',
+            borderRadius: '16px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+          }}
         >
-          <Filter size={14} /> Filters
-          <ChevronDown size={14} style={{ transform: showFilters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-        </button>
-        <span className="market-count">{products.length} product{products.length !== 1 ? 's' : ''}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                background: 'var(--clr-success, #22c55e)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <CheckCircle2 size={24} />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, color: 'var(--clr-success, #22c55e)', fontWeight: 700, fontSize: '1.05rem' }}>
+                Craft Published Successfully to Marketplace!
+              </h4>
+              <p style={{ margin: '3px 0 0', fontSize: '0.85rem', color: 'var(--clr-text-secondary, #94a3b8)' }}>
+                {publishedName
+                  ? `"${publishedName}" is now live and discoverable by buyers.`
+                  : 'Your item is now live and discoverable by buyers.'}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate('/dashboard')}
+              title="Return to Artisan Studio Dashboard"
+            >
+              <LayoutGrid size={15} /> Artisan Studio
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => navigate('/capture')}
+              title="Capture and publish another craft"
+            >
+              <PlusCircle size={15} /> Add Another Craft
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setBannerVisible(false)}
+              title="Dismiss notification"
+              style={{ padding: '6px 8px' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Filter bar & Artisan Studio Links */}
+      <div className="market-toolbar animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            className={`btn btn-secondary btn-sm ${showFilters ? 'active' : ''}`}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter size={14} /> Filters
+            <ChevronDown size={14} style={{ transform: showFilters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
+          <span className="market-count">{products.length} product{products.length !== 1 ? 's' : ''}</span>
+        </div>
+
+        {isAuthenticated && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate('/dashboard')}
+              title="Return to Artisan Studio"
+            >
+              <LayoutGrid size={14} /> Artisan Studio
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => navigate('/capture')}
+              title="Add New Craft"
+            >
+              <PlusCircle size={14} /> New Craft
+            </button>
+          </div>
+        )}
       </div>
 
       {showFilters && (
@@ -180,6 +282,15 @@ export default function BuyerMarketplace({ toast }) {
                 </div>
                 <div className="pc-body">
                   <h3 className="pc-title">{p.product_name || 'Untitled Craft'}</h3>
+                  <div className="pc-artisan-by">
+                    <span className="pc-by-label">By</span>
+                    <span className="pc-artisan-name">{p.artisan_name || 'Master Artisan'}</span>
+                    {p.artisan_phone && (
+                      <span className="pc-artisan-phone" title={`Contact: ${p.artisan_phone}`}>
+                        <Phone size={10} /> {p.artisan_phone}
+                      </span>
+                    )}
+                  </div>
                   <p className="pc-category">{p.category || p.craft_type || 'Handmade'}</p>
                   <div className="pc-footer">
                     <span className="pc-price">{formatPrice(p.pricing?.recommended_price)}</span>
@@ -209,7 +320,24 @@ export default function BuyerMarketplace({ toast }) {
 
                   <div className="detail-body">
                     <div className="detail-header">
-                      <h2 className="detail-title">{p.product_name || 'Untitled'}</h2>
+                      <div className="detail-header-left">
+                        <h2 className="detail-title">{p.product_name || 'Untitled'}</h2>
+                        <div className="detail-artisan-badge-row">
+                          <div className="detail-artisan-badge">
+                            <span className="detail-artisan-label">Artisan:</span>
+                            <span className="detail-artisan-name">✨ {p.artisan_name || 'Master Artisan'}</span>
+                          </div>
+                          {p.artisan_phone && (
+                            <a
+                              href={`tel:${p.artisan_phone}`}
+                              className="detail-phone-pill"
+                              title="Click to call artisan directly"
+                            >
+                              <Phone size={12} /> {p.artisan_phone}
+                            </a>
+                          )}
+                        </div>
+                      </div>
                       <StatusBadge status={p.status} />
                     </div>
 
@@ -231,7 +359,43 @@ export default function BuyerMarketplace({ toast }) {
                     </div>
 
                     {p.description && (
-                      <p className="detail-desc">{p.description}</p>
+                      <div className="detail-desc-block">
+                        <h4 className="detail-desc-heading">Product Description</h4>
+                        <p className="detail-desc">{p.description}</p>
+                        <div className="detail-artisan-signature">
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', width: '100%' }}>
+                            <div>
+                              <span className="detail-sig-label">Authentic craft published by: </span>
+                              <strong className="detail-sig-name">
+                                🎨 {p.artisan_name || 'Master Artisan'}
+                                {p.artisan_username ? ` (@${p.artisan_username})` : ''}
+                              </strong>
+                            </div>
+                            {p.artisan_phone && (
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <a
+                                  href={`tel:${p.artisan_phone}`}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '0.78rem' }}
+                                  title="Call artisan"
+                                >
+                                  <Phone size={12} /> Call: {p.artisan_phone}
+                                </a>
+                                <a
+                                  href={`https://wa.me/${p.artisan_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${p.artisan_name || 'Artisan'}, I am interested in your craft "${p.product_name || 'Product'}" on KalaCraft.`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-success btn-sm"
+                                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '0.78rem' }}
+                                  title="Contact artisan on WhatsApp"
+                                >
+                                  <MessageSquare size={12} /> WhatsApp
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     )}
 
                     {p.keywords?.length > 0 && (

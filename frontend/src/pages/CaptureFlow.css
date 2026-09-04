@@ -107,10 +107,19 @@
 
 .flow-actions .btn { flex: 1; }
 
-/* ─── Photo ──────────────────────────────────────────────────────────────── */
+/* ─── Photo Step & Sizing ──────────────────────────────────────────────────── */
+
+.photo-step-container,
+.voice-step-container,
+.catalogue-step-container,
+.publish-step-container {
+  max-width: 580px;
+  margin: 0 auto;
+}
 
 .photo-area {
-  margin-bottom: var(--space-md);
+  margin: 0 auto var(--space-md);
+  max-width: 540px;
 }
 
 .photo-placeholder {
@@ -120,7 +129,7 @@
   justify-content: center;
   gap: var(--space-sm);
   width: 100%;
-  height: 240px;
+  height: 280px;
   border: 2px dashed var(--clr-border-strong);
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -143,15 +152,27 @@
 .photo-preview {
   position: relative;
   width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  background: #0d0f14;
+  border: 1px solid var(--clr-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  max-height: 440px;
 }
 
 .photo-preview img {
-  width: 100%;
-  height: 240px;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 440px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: var(--radius-lg);
+  display: block;
 }
 
 .photo-remove {
@@ -180,7 +201,8 @@
 /* ─── Image Compare ──────────────────────────────────────────────────────── */
 
 .image-compare {
-  margin-bottom: var(--space-md);
+  margin: 0 auto var(--space-md);
+  max-width: 580px;
 }
 
 .ic-row {
@@ -205,14 +227,16 @@
 
 .ic-img {
   width: 100%;
-  height: 100px;
-  object-fit: cover;
+  height: 180px;
+  object-fit: contain;
+  background: #0d0f14;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--clr-border);
 }
 
 .ic-placeholder {
   width: 100%;
-  height: 100px;
+  height: 180px;
 }
 
 /* ─── Recorder ───────────────────────────────────────────────────────────── */
@@ -340,6 +364,53 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+}
+
+.review-grid-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.review-col-heading {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+  color: var(--clr-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.review-col-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.review-col-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.voice-lang-card {
+  border: 1px solid var(--clr-border);
+  background: var(--clr-surface);
+}
+
+@media (min-width: 900px) {
+  .review-grid-layout {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: var(--space-lg);
+    align-items: start;
+  }
+
+  .review-col-pricing {
+    position: sticky;
+    top: 80px;
+  }
 }
 
 .rf-group {

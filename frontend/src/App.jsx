@@ -24,6 +24,10 @@ function AppRoutes() {
       <Navbar />
       <Routes>
         <Route
+          path="/"
+          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+        />
+        <Route
           path="/login"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage toast={toast} />}
         />
@@ -41,7 +45,7 @@ function AppRoutes() {
         />
         <Route
           path="*"
-          element={<Navigate to={isAuthenticated ? '/dashboard' : '/marketplace'} replace />}
+          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
         />
       </Routes>
       <BottomNav />

@@ -55,30 +55,66 @@ async function request(method, path, { body, isFormData } = {}) {
  * Body: { mobile_number: string }
  * Response: { message, delivery_method }
  */
-export async function requestOtp(mobile_number) {
+/**
+ * Log in with Username & Password.
+ * POST /api/v1/auth/login
+ * Body: { username: string, password: string }
+ * Response: { message, token, artisan: { artisan_id, username, display_name } }
+ */
+export async function loginWithPassword(username, password) {
   if (MOCK_MODE) {
-    await sleep(800);
-    return mock.mockOtpRequestResponse;
+    await sleep(600);
+    return {
+      message: 'Login successful',
+      token: 'mock_jwt_token_' + Date.now(),
+      artisan: {
+        artisan_id: 'mock-artisan-001',
+        username: username || 'artisan',
+        display_name: 'Master Artisan',
+      },
+    };
   }
-  return request('POST', '/auth/otp/request', {
-    body: { mobile_number },
+  return request('POST', '/auth/login', {
+    body: { username, password },
   });
 }
 
 /**
- * Verify OTP and receive JWT + artisan_id.
- * POST /api/v1/auth/otp/verify
- * Body: { mobile_number: string, otp: string }
- * Response: { message, token, artisan_id }
+ * Register a new artisan with Username & Password.
+ * POST /api/v1/auth/register
+ * Body: { username: string, password: string, display_name?: string }
+ * Response: { message, token, artisan: { artisan_id, username, display_name } }
  */
-export async function verifyOtp(mobile_number, otp) {
+export async function registerWithPassword(username, password, displayName, mobileNumber) {
   if (MOCK_MODE) {
-    await sleep(600);
-    return mock.mockOtpVerifyResponse;
+    await sleep(800);
+    return {
+      message: 'Registration successful',
+      token: 'mock_jwt_token_' + Date.now(),
+      artisan: {
+        artisan_id: 'mock-artisan-' + Date.now(),
+        username: username,
+        display_name: displayName || username,
+        mobile_number: mobileNumber || null,
+      },
+    };
   }
-  return request('POST', '/auth/otp/verify', {
-    body: { mobile_number, otp },
+  return request('POST', '/auth/register', {
+    body: {
+      username,
+      password,
+      display_name: displayName,
+      mobile_number: mobileNumber,
+    },
   });
+}
+
+export async function requestOtp(mobile_number) {
+  return request('POST', '/auth/otp/request', { body: { mobile_number } });
+}
+
+export async function verifyOtp(mobile_number, otp) {
+  return request('POST', '/auth/otp/verify', { body: { mobile_number, otp } });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -139,13 +175,16 @@ export async function uploadImage(productId, imageFile) {
 //             production: { time_days, technique }, transcription_confidence }
 // ═════════════════════════════════════════════════════════════════════════════
 
-export async function uploadVoice(productId, audioFile) {
+export async function uploadVoice(productId, audioFile, language = null) {
   if (MOCK_MODE) {
     await sleep(3000);
     return mock.mockVoiceUploadResponse;
   }
   const formData = new FormData();
   formData.append('audio', audioFile);
+  if (language) {
+    formData.append('language', language);
+  }
   return request('POST', `/products/${productId}/voice`, {
     body: formData,
     isFormData: true,
@@ -192,10 +231,10 @@ export async function generateCatalogue(productId) {
 //             recommended_price, confidence, reasoning[] } }
 // ═════════════════════════════════════════════════════════════════════════════
 
-export async function getPrice(productId) {
+export async function getPrice(productId, productContext = {}) {
   if (MOCK_MODE) {
     await sleep(2500);
-    return mock.mockPriceResponse;
+    return mock.getDynamicMockPrice(productContext);
   }
   return request('GET', `/products/${productId}/price`);
 }

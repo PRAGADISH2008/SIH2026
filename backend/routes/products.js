@@ -7,7 +7,14 @@ const pool = require('../db/pool');
 const authMiddleware = require('../middleware/auth');
 const errorResponse = require('../utils/errorResponse');
 const formatProduct = require('../utils/formatProduct');
-const { enhanceProductImage, analyzeProductImage, mimeToExtension } = require('../utils/geminiService');
+const {
+  enhanceProductImage,
+  analyzeProductImage,
+  extractProductAttributes,
+  generatePricingIntelligence,
+  mimeToExtension,
+} = require('../utils/geminiService');
+const { transcribeAudio } = require('../utils/assemblyService');
 
 const router = express.Router();
 
@@ -26,7 +33,13 @@ const upload = multer({ storage });
 // ─── Helper: fetch product row by ID ────────────────────────────────────────
 async function getProductById(productId) {
   const result = await pool.query(
-    'SELECT * FROM products WHERE product_id = $1',
+    `SELECT p.*, 
+            COALESCE(a.display_name, a.username, 'Master Artisan') AS artisan_name, 
+            a.username AS artisan_username,
+            a.mobile_number AS artisan_phone
+     FROM products p
+     LEFT JOIN artisans a ON p.artisan_id = a.id
+     WHERE p.product_id = $1`,
     [productId]
   );
   return result.rows[0] || null;
@@ -41,28 +54,36 @@ router.get('/', async (req, res) => {
   try {
     const { category, craft_type, min_price, max_price } = req.query;
 
-    let query = 'SELECT * FROM products WHERE status = $1';
+    let query = `
+      SELECT p.*, 
+             COALESCE(a.display_name, a.username, 'Master Artisan') AS artisan_name, 
+             a.username AS artisan_username,
+             a.mobile_number AS artisan_phone
+      FROM products p
+      LEFT JOIN artisans a ON p.artisan_id = a.id
+      WHERE p.status = $1
+    `;
     const params = ['published'];
     let paramIndex = 2;
 
     if (category) {
-      query += ` AND category = $${paramIndex++}`;
+      query += ` AND p.category = $${paramIndex++}`;
       params.push(category);
     }
     if (craft_type) {
-      query += ` AND craft_type = $${paramIndex++}`;
+      query += ` AND p.craft_type = $${paramIndex++}`;
       params.push(craft_type);
     }
     if (min_price) {
-      query += ` AND pricing_recommended_price >= $${paramIndex++}`;
+      query += ` AND p.pricing_recommended_price >= $${paramIndex++}`;
       params.push(Number(min_price));
     }
     if (max_price) {
-      query += ` AND pricing_recommended_price <= $${paramIndex++}`;
+      query += ` AND p.pricing_recommended_price <= $${paramIndex++}`;
       params.push(Number(max_price));
     }
 
-    query += ' ORDER BY created_at DESC';
+    query += ' ORDER BY p.created_at DESC';
 
     const result = await pool.query(query, params);
 
@@ -121,7 +142,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 3. POST /products/:id/image — Upload & Enhance Image (auth required)
-//    Sends uploaded image to Gemini (gemini-2.5-flash-image) for enhancement.
+//    Sends uploaded image to Gemini (gemini-3.6-flash) for enhancement.
 //    Falls back to original image URL if Gemini fails.
 // ═════════════════════════════════════════════════════════════════════════════
 router.post('/:id/image', authMiddleware, upload.single('image'), async (req, res) => {
@@ -184,7 +205,12 @@ router.post('/:id/image', authMiddleware, upload.single('image'), async (req, re
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 4. POST /products/:id/voice — Upload & Transcribe Voice (auth required)
-//    Mock: returns realistic Indian handicraft transcription data.
+//    Pipeline:
+//      Audio upload (Multer)
+//      -> AssemblyAI (Speech-to-text transcription)
+//      -> Gemini (Product attribute & story extraction)
+//      -> PostgreSQL update
+//      -> Standard product response contract
 // ═════════════════════════════════════════════════════════════════════════════
 router.post('/:id/voice', authMiddleware, upload.single('audio'), async (req, res) => {
   try {
@@ -197,40 +223,50 @@ router.post('/:id/voice', authMiddleware, upload.single('audio'), async (req, re
       return errorResponse(res, 400, 'Audio file is required (field name: "audio")');
     }
 
-    // Mock transcription / attribute extraction
-    const mockResult = {
-      description: 'Handcrafted Madhubani painting on handmade paper using natural dyes. Features traditional fish and lotus motifs symbolising fertility and prosperity. Made using the Bharni (filled) style with fine bamboo nib detailing.',
-      language_original: row.language_original || 'hi',
-      material: 'Handmade paper, natural dyes, bamboo nib',
-      craft_type: 'Madhubani Painting',
+    const preferredLanguage = req.body.language || null;
+    console.log(`🎙️ [AssemblyAI] Transcribing voice input: ${req.file.originalname} (${req.file.path}) [Language: ${preferredLanguage || 'auto-detect'}]`);
+    const { text: transcriptText, languageCode, confidence } = await transcribeAudio(req.file.path, preferredLanguage);
+
+    console.log(`🤖 [Gemini] Interpreting transcript and extracting attributes (language: ${languageCode})...`);
+    const extracted = await extractProductAttributes(transcriptText, languageCode);
+
+    const voiceResult = {
+      description: extracted.description,
+      language_original: extracted.language_original || row.language_original || languageCode || 'en',
+      material: extracted.material,
+      craft_type: extracted.craft_type,
       production: {
-        time_days: 7,
-        technique: 'Bharni (filled) style with bamboo nib',
+        time_days: extracted.production?.time_days || 5,
+        technique: extracted.production?.technique || 'Handcrafted',
       },
-      transcription_confidence: 0.92,
+      transcription_confidence: confidence,
     };
 
-    // Update the product with extracted attributes
+    // Update the product with extracted attributes in PostgreSQL
     await pool.query(
       `UPDATE products
        SET description = $1, language_original = $2, material = $3,
            craft_type = $4, production_time_days = $5, production_technique = $6
        WHERE product_id = $7`,
       [
-        mockResult.description,
-        mockResult.language_original,
-        mockResult.material,
-        mockResult.craft_type,
-        mockResult.production.time_days,
-        mockResult.production.technique,
+        voiceResult.description,
+        voiceResult.language_original,
+        voiceResult.material,
+        voiceResult.craft_type,
+        voiceResult.production.time_days,
+        voiceResult.production.technique,
         req.params.id,
       ]
     );
 
-    res.status(200).json(mockResult);
+    console.log(`✅ [Voice Pipeline] Successfully processed voice and updated product ${req.params.id}`);
+    res.status(200).json(voiceResult);
   } catch (err) {
-    console.error('Voice upload error:', err);
-    return errorResponse(res, 500, 'Failed to process voice');
+    const safeMessage = (err.message || String(err))
+      .replace(process.env.ASSEMBLYAI_API_KEY || '', '[REDACTED]')
+      .replace(process.env.GEMINI_API_KEY || '', '[REDACTED]');
+    console.error('Voice pipeline error:', safeMessage);
+    return errorResponse(res, 500, `Failed to process voice: ${safeMessage}`);
   }
 });
 
@@ -268,7 +304,7 @@ router.post('/:id/catalogue', authMiddleware, async (req, res) => {
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
             const structuredResponse = await ai.models.generateContent({
-              model: 'gemini-2.5-flash-image',
+              model: 'gemini-3.6-flash',
               contents: [
                 {
                   role: 'user',
@@ -361,24 +397,11 @@ router.get('/:id/price', authMiddleware, async (req, res) => {
       return errorResponse(res, 404, 'Product not found');
     }
 
-    // Mock pricing engine output
-    const mockPricing = {
-      pricing: {
-        estimated_cost: 450,
-        market_range_low: 800,
-        market_range_high: 2500,
-        recommended_price: 1500,
-        confidence: 0.85,
-        reasoning: [
-          'Madhubani paintings of this size typically sell for ₹800–₹2500 online',
-          'Natural dye works command a 20-30% premium over synthetic alternatives',
-          'Bharni style is one of the most sought-after Madhubani techniques',
-          'Estimated material + labour cost is approximately ₹450',
-        ],
-      },
-    };
+    // Generate dynamic AI Pricing Intelligence tailored specifically to this craft
+    console.log(`🤖 [Pricing] Generating dynamic AI pricing for: ${row.product_name || row.craft_type || req.params.id}...`);
+    const pricingData = await generatePricingIntelligence(row);
 
-    // Update the product with pricing data
+    // Update the product with bespoke pricing data
     await pool.query(
       `UPDATE products
        SET pricing_estimated_cost = $1, pricing_market_range_low = $2,
@@ -386,17 +409,18 @@ router.get('/:id/price', authMiddleware, async (req, res) => {
            pricing_confidence = $5, pricing_reasoning = $6
        WHERE product_id = $7`,
       [
-        mockPricing.pricing.estimated_cost,
-        mockPricing.pricing.market_range_low,
-        mockPricing.pricing.market_range_high,
-        mockPricing.pricing.recommended_price,
-        mockPricing.pricing.confidence,
-        mockPricing.pricing.reasoning,
+        pricingData.estimated_cost,
+        pricingData.market_range_low,
+        pricingData.market_range_high,
+        pricingData.recommended_price,
+        pricingData.confidence,
+        pricingData.reasoning,
         req.params.id,
       ]
     );
 
-    res.status(200).json(mockPricing);
+    console.log(`✅ [Pricing] Generated: Est ₹${pricingData.estimated_cost} | Range ₹${pricingData.market_range_low}-₹${pricingData.market_range_high} | Rec ₹${pricingData.recommended_price}`);
+    res.status(200).json({ pricing: pricingData });
   } catch (err) {
     console.error('Price recommendation error:', err);
     return errorResponse(res, 500, 'Failed to generate price recommendation');

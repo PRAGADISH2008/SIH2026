@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Camera, ShoppingBag, LayoutGrid } from 'lucide-react';
+import { Camera, ShoppingBag, LayoutGrid, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './BottomNav.css';
 
@@ -36,6 +36,15 @@ export default function BottomNav() {
           <ShoppingBag size={20} />
           <span>Market</span>
         </NavLink>
+        {!isAuthenticated && (
+          <NavLink
+            to="/login"
+            className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          >
+            <LogIn size={20} />
+            <span>Artisan Login</span>
+          </NavLink>
+        )}
       </div>
     </nav>
   );

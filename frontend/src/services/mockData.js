@@ -81,21 +81,44 @@ export const mockCatalogueResponse = {
     'An exquisite Madhubani painting crafted in the traditional Bharni (filled) style on handmade paper. Featuring iconic fish and lotus motifs rendered with natural dyes and fine bamboo nib detailing, this piece embodies the rich artistic heritage of Mithila, Bihar. Each piece is one-of-a-kind, reflecting hours of meticulous handwork by a skilled artisan.',
 };
 
-export const mockPriceResponse = {
-  pricing: {
-    estimated_cost: 450,
-    market_range_low: 800,
-    market_range_high: 2500,
-    recommended_price: 1500,
-    confidence: 0.85,
-    reasoning: [
-      'Madhubani paintings of this size typically sell for ₹800–₹2500 online',
-      'Natural dye works command a 20-30% premium over synthetic alternatives',
-      'Bharni style is one of the most sought-after Madhubani techniques',
-      'Estimated material + labour cost is approximately ₹450',
-    ],
-  },
-};
+export function getDynamicMockPrice(product = {}) {
+  const days = Math.max(1, Number(product.production_time_days || product.production?.time_days) || 3);
+  const craft = product.craft_type || product.category || 'Handcrafted Craft';
+  const mat = product.material || 'Artisan materials';
+  const laborCost = days * 420;
+  const textLower = `${craft} ${mat} ${product.product_name || ''}`.toLowerCase();
+
+  let materialCost = 350;
+  if (textLower.includes('silk') || textLower.includes('pashmina')) materialCost = 1400;
+  else if (textLower.includes('brass') || textLower.includes('metal') || textLower.includes('dokra')) materialCost = 900;
+  else if (textLower.includes('wood') || textLower.includes('carving')) materialCost = 550;
+  else if (textLower.includes('pottery') || textLower.includes('terracotta') || textLower.includes('clay')) materialCost = 250;
+  else if (textLower.includes('leather')) materialCost = 650;
+  else if (textLower.includes('bamboo') || textLower.includes('cane') || textLower.includes('jute')) materialCost = 300;
+
+  const estimated_cost = materialCost + laborCost;
+  const market_range_low = Math.max(500, Math.round((estimated_cost * 1.5) / 50) * 50);
+  const market_range_high = Math.round((estimated_cost * 3.2) / 50) * 50;
+  const recommended_price = Math.round((estimated_cost * 2.2) / 50) * 50;
+
+  return {
+    pricing: {
+      estimated_cost,
+      market_range_low,
+      market_range_high,
+      recommended_price,
+      confidence: 0.88,
+      reasoning: [
+        `${craft} items of this size typically retail between ₹${market_range_low} and ₹${market_range_high} online`,
+        `The use of authentic ${mat} commands a 20-30% premium over synthetic alternatives`,
+        `Crafting requires dedicated artisan handwork spanning approximately ${days} day${days > 1 ? 's' : ''}`,
+        `Estimated raw material (₹${materialCost}) + artisan labour (₹${laborCost}) is approximately ₹${estimated_cost}`,
+      ],
+    },
+  };
+}
+
+export const mockPriceResponse = getDynamicMockPrice();
 
 export const mockPublishResponse = { status: 'published' };
 
