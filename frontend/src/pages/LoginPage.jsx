@@ -173,7 +173,7 @@ export default function LoginPage({ toast }) {
           </div>
         )}
 
-        <div className="login-card glass-card">
+        <div className="login-card">
           {/* STEP 1: PORTAL SELECTION (Before Login) */}
           {portal === 'select' ? (
             <div className="role-select-container">

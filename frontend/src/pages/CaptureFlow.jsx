@@ -4,8 +4,9 @@ import {
   Camera, Mic, MicOff, Sparkles, DollarSign, CheckCircle,
   Send, ArrowRight, ArrowLeft, Image as ImageIcon, Upload,
   Play, Square, RotateCcw, FileText, PartyPopper, Copy, X,
-  ShoppingBag, LayoutGrid
+  ShoppingBag, LayoutGrid, Volume2, VolumeX
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import {
   createDraftProduct, uploadImage, uploadVoice,
   generateCatalogue, getPrice, confirmProduct,
@@ -95,6 +96,7 @@ async function compressImage(file, maxDimension = 1600, quality = 0.85) {
 
 export default function CaptureFlow({ toast }) {
   const navigate = useNavigate();
+  const { language: globalLang, setLanguage: setGlobalLang, t, speakText, isSpeaking, stopSpeaking } = useLanguage();
   const [currentStep, setCurrentStep] = useState(0);
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -113,8 +115,15 @@ export default function CaptureFlow({ toast }) {
   const resolvedOriginal = resolveImageUrl(imageResult?.original_url || product?.images?.original_url, BACKEND_ORIGIN) || imagePreview;
   const resolvedEnhanced = resolveImageUrl(imageResult?.enhanced_url || product?.images?.enhanced_url, BACKEND_ORIGIN) || imagePreview;
 
-  // Voice state
-  const [language, setLanguage] = useState('auto');
+  // Voice state - synced with global language
+  const [language, setLanguage] = useState(() => (globalLang && globalLang !== 'en' ? globalLang : 'auto'));
+
+  useEffect(() => {
+    if (globalLang && globalLang !== 'en' && globalLang !== language) {
+      setLanguage(globalLang);
+    }
+  }, [globalLang]);
+
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
@@ -552,140 +561,261 @@ export default function CaptureFlow({ toast }) {
             <div className="flow-step-icon">
               <s.icon size={14} />
             </div>
-            <span className="flow-step-label">{s.label}</span>
+            <span className="flow-step-label">{t(`step.${s.id}`, s.label)}</span>
           </div>
         ))}
       </div>
 
       {/* ═══ STEP 0: Photo Capture ═══ */}
       {currentStep === 0 && (
-        <div className="flow-section photo-step-container animate-fade-in">
-          <h2 className="flow-title">
-            <Camera size={20} />
-            Capture Your Craft
-          </h2>
-          <p className="flow-desc">Take a photo using your camera or choose from your gallery</p>
-
-          <div className="photo-area">
-            {imagePreview ? (
-              <div className="photo-preview">
-                <img src={imagePreview} alt="Craft preview" />
+        <div className="flow-section capture-layout-2col animate-fade-in">
+          {/* Left Column: Capture Card Workspace */}
+          <div className="capture-main-col">
+            <div className="card capture-card">
+              <div className="flow-title-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <h2 className="flow-title" style={{ margin: 0 }}>
+                  <Camera size={20} />
+                  {t('capture.title', 'Capture Your Craft')}
+                </h2>
                 <button
                   type="button"
-                  className="photo-remove"
+                  className={`tts-audio-btn ${isSpeaking ? 'speaking' : ''}`}
                   onClick={() => {
-                    setImageFile(null);
-                    setImagePreview(null);
+                    if (isSpeaking) {
+                      stopSpeaking();
+                    } else {
+                      const textToRead = `${t('capture.title')}. ${t('capture.subtitle')}. ${t('capture.tip1Title')}: ${t('capture.tip1Desc')}`;
+                      speakText(textToRead, language === 'auto' ? globalLang : language);
+                    }
                   }}
-                  title="Remove / Retake"
+                  title={isSpeaking ? t('tts.stop', 'Stop reading') : t('tts.listen', 'Read instructions aloud')}
                 >
-                  <X size={16} />
+                  {isSpeaking ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                  <span>{isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen')}</span>
                 </button>
               </div>
-            ) : (
-              <div
-                className="photo-placeholder"
-                onClick={() => cameraInputRef.current?.click()}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="photo-placeholder-icon">
-                  <Camera size={42} strokeWidth={1.5} />
+              <p className="flow-desc">{t('capture.subtitle', 'Take a photo using your camera or choose from your gallery')}</p>
+
+              <div className="photo-area">
+                {imagePreview ? (
+                  <div className="photo-preview">
+                    <img src={imagePreview} alt="Craft preview" />
+                    <button
+                      type="button"
+                      className="photo-remove"
+                      onClick={() => {
+                        setImageFile(null);
+                        setImagePreview(null);
+                      }}
+                      title="Remove / Retake"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="photo-placeholder"
+                    onClick={() => cameraInputRef.current?.click()}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="photo-placeholder-icon">
+                      <Camera size={42} strokeWidth={1.5} />
+                    </div>
+                    <span className="photo-placeholder-title">{t('capture.openCamera', 'Tap to Open Camera')}</span>
+                    <span className="photo-placeholder-sub">{t('capture.cameraHint', 'Takes an instant photo of your product & auto-enhances')}</span>
+                  </div>
+                )}
+
+                {/* Hidden file inputs: dedicated camera & dedicated gallery */}
+                <input
+                  ref={cameraInputRef}
+                  id="camera-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
+                <input
+                  ref={galleryInputRef}
+                  id="gallery-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
+
+                {/* Mobile-friendly dual capture action buttons */}
+                <div className="photo-capture-options">
+                  <button
+                    type="button"
+                    className="btn btn-primary photo-opt-btn photo-opt-camera"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={loading}
+                  >
+                    <Camera size={19} />
+                    <span>{imagePreview ? t('capture.retakePhoto', 'Retake with Camera') : t('capture.takePhoto', 'Take Photo (Camera)')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary photo-opt-btn"
+                    onClick={() => galleryInputRef.current?.click()}
+                    disabled={loading}
+                  >
+                    <ImageIcon size={18} />
+                    <span>{t('capture.gallery', 'Choose from Gallery')}</span>
+                  </button>
                 </div>
-                <span className="photo-placeholder-title">Tap to Open Camera</span>
-                <span className="photo-placeholder-sub">Takes an instant photo of your product & auto-enhances</span>
               </div>
-            )}
 
-            {/* Hidden file inputs: dedicated camera & dedicated gallery */}
-            <input
-              ref={cameraInputRef}
-              id="camera-input"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-            />
-            <input
-              ref={galleryInputRef}
-              id="gallery-input"
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-            />
+              {/* Language selector */}
+              <div style={{ marginTop: 'var(--space-md)' }}>
+                <label className="input-label">{t('capture.nativeLang', 'Your native language (for voice & details)')}</label>
+                <div className="lang-chips">
+                  {LANGUAGES.map((l) => (
+                    <button
+                      key={l.code}
+                      type="button"
+                      className={`chip ${language === l.code ? 'active' : ''}`}
+                      onClick={() => {
+                        setLanguage(l.code);
+                        if (l.code !== 'auto') {
+                          setGlobalLang(l.code);
+                        }
+                      }}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            {/* Mobile-friendly dual capture action buttons */}
-            <div className="photo-capture-options">
-              <button
-                type="button"
-                className="btn btn-primary photo-opt-btn photo-opt-camera"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={loading}
-              >
-                <Camera size={19} />
-                <span>{imagePreview ? 'Retake with Camera' : 'Take Photo (Camera)'}</span>
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary photo-opt-btn"
-                onClick={() => galleryInputRef.current?.click()}
-                disabled={loading}
-              >
-                <ImageIcon size={18} />
-                <span>Choose from Gallery</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Language selector */}
-          <div style={{ marginTop: 'var(--space-md)' }}>
-            <label className="input-label">Your native language (for voice & details)</label>
-            <div className="lang-chips">
-              {LANGUAGES.map((l) => (
+              {imageFile && (
                 <button
-                  key={l.code}
                   type="button"
-                  className={`chip ${language === l.code ? 'active' : ''}`}
-                  onClick={() => setLanguage(l.code)}
+                  className="btn btn-primary btn-block btn-lg"
+                  disabled={loading}
+                  onClick={handleUploadImage}
+                  style={{ marginTop: 'var(--space-lg)' }}
                 >
-                  {l.label}
+                  <Upload size={18} /> {loading ? t('capture.uploading', 'Uploading & Enhancing...') : t('capture.enhanceBtn', 'Upload & Enhance Now')}
                 </button>
-              ))}
+              )}
             </div>
           </div>
 
-          {imageFile && (
-            <button
-              type="button"
-              className="btn btn-primary btn-block btn-lg"
-              disabled={loading}
-              onClick={handleUploadImage}
-              style={{ marginTop: 'var(--space-lg)' }}
-            >
-              <Upload size={18} /> {loading ? 'Uploading & Enhancing...' : 'Upload & Enhance Now'}
-            </button>
-          )}
+          {/* Right Column: Companion Studio Guide Panel */}
+          <div className="capture-sidebar-col">
+            {/* Photography Guide Card */}
+            <div className="card capture-guide-card">
+              <div className="cgc-header">
+                <div className="cgc-icon-badge">
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <h3 className="cgc-title">{t('capture.tipsTitle', 'Artisan Photography Tips')}</h3>
+                  <p className="cgc-subtitle">{t('capture.tipsSubtitle', 'Techniques for high-converting marketplace listings')}</p>
+                </div>
+              </div>
+
+              <div className="cgc-tips-list">
+                <div className="cgc-tip-item">
+                  <span className="cgc-tip-num">1</span>
+                  <div className="cgc-tip-body">
+                    <strong>{t('capture.tip1Title', 'Natural Soft Lighting')}</strong>
+                    <p>{t('capture.tip1Desc', 'Shoot near an open window or daylight shade. Avoid harsh camera flash and hard shadows.')}</p>
+                  </div>
+                </div>
+
+                <div className="cgc-tip-item">
+                  <span className="cgc-tip-num">2</span>
+                  <div className="cgc-tip-body">
+                    <strong>{t('capture.tip2Title', 'Clean Neutral Background')}</strong>
+                    <p>{t('capture.tip2Desc', 'Place your craft on plain wood, fabric, or a neutral table for clean AI studio polish.')}</p>
+                  </div>
+                </div>
+
+                <div className="cgc-tip-item">
+                  <span className="cgc-tip-num">3</span>
+                  <div className="cgc-tip-body">
+                    <strong>{t('capture.tip3Title', 'Highlight Handmade Texture')}</strong>
+                    <p>{t('capture.tip3Desc', 'Capture authentic carving grooves, handloom weaves, and clay glaze signatures.')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Workflow Preview Card */}
+            <div className="card capture-workflow-card">
+              <div className="cwc-header">
+                <h3 className="cwc-title">{t('capture.nextTitle', 'What Happens Next?')}</h3>
+                <span className="cwc-badge">{t('capture.nextBadge', '3 Easy Steps')}</span>
+              </div>
+
+              <div className="cwc-steps">
+                <div className="cwc-step">
+                  <div className="cwc-step-num">1</div>
+                  <div className="cwc-step-info">
+                    <h4>{t('capture.nextStep1Title', 'Instant AI Studio Polish')}</h4>
+                    <p>{t('capture.nextStep1Desc', 'AI balances shadows, removes background clutter, and sharpens craft textures.')}</p>
+                  </div>
+                </div>
+
+                <div className="cwc-step">
+                  <div className="cwc-step-num">2</div>
+                  <div className="cwc-step-info">
+                    <h4>{t('capture.nextStep2Title', 'Voice Storytelling')}</h4>
+                    <p>{t('capture.nextStep2Desc', 'Speak in your regional language; AI generates professional e-commerce product titles & descriptions.')}</p>
+                  </div>
+                </div>
+
+                <div className="cwc-step">
+                  <div className="cwc-step-num">3</div>
+                  <div className="cwc-step-info">
+                    <h4>{t('capture.nextStep3Title', 'Fair Price & Publish')}</h4>
+                    <p>{t('capture.nextStep3Desc', 'Get AI-recommended fair pricing based on material cost, labor days, and live marketplace demand.')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ═══ STEP 1: Voice Recording ═══ */}
       {currentStep === 1 && (
         <div className="flow-section voice-step-container animate-fade-in">
-          <h2 className="flow-title">
-            <Mic size={20} />
-            Describe Your Craft
-          </h2>
+          <div className="flow-title-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <h2 className="flow-title" style={{ margin: 0 }}>
+              <Mic size={20} />
+              {t('voice.title', 'Describe Your Craft')}
+            </h2>
+            <button
+              type="button"
+              className={`tts-audio-btn ${isSpeaking ? 'speaking' : ''}`}
+              onClick={() => {
+                if (isSpeaking) {
+                  stopSpeaking();
+                } else {
+                  speakText(`${t('voice.title')}. ${t('voice.desc')}`, language === 'auto' ? globalLang : language);
+                }
+              }}
+              title={isSpeaking ? t('tts.stop', 'Stop reading') : t('tts.listen', 'Read instructions aloud')}
+            >
+              {isSpeaking ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              <span>{isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen')}</span>
+            </button>
+          </div>
           <p className="flow-desc">
-            Record a voice note in your native language — describe materials, technique, and story.
+            {t('voice.desc', 'Record a voice note in your native language — describe materials, technique, and story.')}
           </p>
 
           {/* Spoken Language Selector */}
           <div className="card voice-lang-card" style={{ marginBottom: 'var(--space-md)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <label className="input-label" style={{ margin: 0, fontWeight: 600 }}>
-                Spoken Language
+                {t('capture.nativeLang', 'Spoken Language')}
               </label>
               <span className="badge badge-accent" style={{ fontSize: '0.72rem' }}>
                 AssemblyAI + Gemini Multilingual
@@ -700,7 +830,12 @@ export default function CaptureFlow({ toast }) {
                   key={l.code}
                   type="button"
                   className={`chip ${language === l.code ? 'active' : ''}`}
-                  onClick={() => setLanguage(l.code)}
+                  onClick={() => {
+                    setLanguage(l.code);
+                    if (l.code !== 'auto') {
+                      setGlobalLang(l.code);
+                    }
+                  }}
                 >
                   {l.label}
                 </button>
@@ -753,7 +888,7 @@ export default function CaptureFlow({ toast }) {
                 </div>
               )}
               <p className="recorder-hint">
-                {isRecording ? 'Recording... tap to stop' : audioBlob ? 'Review your recording' : 'Tap to start recording'}
+                {isRecording ? t('voice.recording', 'Recording... tap to stop') : audioBlob ? 'Review your recording' : t('voice.tapToRecord', 'Tap to start recording')}
               </p>
             </div>
           </div>
@@ -761,7 +896,24 @@ export default function CaptureFlow({ toast }) {
           {/* Voice result preview */}
           {voiceResult && (
             <div className="voice-result card animate-fade-in">
-              <h4>Extracted Details</h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h4 style={{ margin: 0 }}>Extracted Details</h4>
+                <button
+                  type="button"
+                  className={`tts-audio-btn ${isSpeaking ? 'speaking' : ''}`}
+                  onClick={() => {
+                    if (isSpeaking) {
+                      stopSpeaking();
+                    } else if (voiceResult.description) {
+                      speakText(voiceResult.description, language === 'auto' ? globalLang : language);
+                    }
+                  }}
+                  title={isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen to craft description')}
+                >
+                  {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                  <span>{isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen Story')}</span>
+                </button>
+              </div>
               <div className="vr-tags">
                 <span className="badge badge-accent">{voiceResult.craft_type}</span>
                 <span className="badge badge-accent">{voiceResult.material}</span>
@@ -777,14 +929,14 @@ export default function CaptureFlow({ toast }) {
 
           <div className="flow-actions">
             <button className="btn btn-ghost" onClick={() => setCurrentStep(0)}>
-              <ArrowLeft size={16} /> Back
+              <ArrowLeft size={16} /> {t('common.back', 'Back')}
             </button>
             <button
               className="btn btn-primary"
               disabled={!audioBlob}
               onClick={handleUploadVoice}
             >
-              Process Voice <ArrowRight size={16} />
+              {t('voice.processBtn', 'Process Voice')} <ArrowRight size={16} />
             </button>
           </div>
         </div>
@@ -824,11 +976,11 @@ export default function CaptureFlow({ toast }) {
             className="btn btn-primary btn-block btn-lg"
             onClick={handleGenerateCatalogue}
           >
-            <Sparkles size={18} /> Generate Catalogue & Pricing
+            <Sparkles size={18} /> {t('catalogue.generateBtn', 'Generate Catalogue & Pricing')}
           </button>
 
           <button className="btn btn-ghost" onClick={() => setCurrentStep(1)} style={{ marginTop: 8, width: '100%' }}>
-            <ArrowLeft size={16} /> Back to voice
+            <ArrowLeft size={16} /> {t('common.backToVoice', 'Back to voice')}
           </button>
         </div>
       )}
@@ -839,19 +991,19 @@ export default function CaptureFlow({ toast }) {
           <div className="flow-title-row">
             <h2 className="flow-title">
               <CheckCircle size={20} />
-              Review & Confirm
+              {t('review.title', 'Review & Confirm')}
             </h2>
             <StatusBadge status={product?.status} />
           </div>
-          <p className="flow-desc">Review AI-generated fields and make corrections before confirming</p>
+          <p className="flow-desc">{t('review.subtitle', 'Review AI-generated fields and make corrections before confirming')}</p>
 
           <div className="review-grid-layout">
             {/* Left Column: Craft Details Form */}
             <div className="review-col-details card">
-              <h3 className="review-col-heading">Craft Information</h3>
+              <h3 className="review-col-heading">{t('review.craftInfo', 'Craft Information')}</h3>
 
               <div className="rf-group">
-                <label className="input-label">Product Name</label>
+                <label className="input-label">{t('review.productName', 'Product Name')}</label>
                 <input
                   className="input-field"
                   value={editFields.product_name || ''}
@@ -861,7 +1013,7 @@ export default function CaptureFlow({ toast }) {
 
               <div className="rf-row">
                 <div className="rf-group" style={{ flex: 1 }}>
-                  <label className="input-label">Category</label>
+                  <label className="input-label">{t('market.category', 'Category')}</label>
                   <input
                     className="input-field"
                     value={editFields.category || ''}
@@ -869,7 +1021,7 @@ export default function CaptureFlow({ toast }) {
                   />
                 </div>
                 <div className="rf-group" style={{ flex: 1 }}>
-                  <label className="input-label">Craft Type</label>
+                  <label className="input-label">{t('market.craftType', 'Craft Type')}</label>
                   <input
                     className="input-field"
                     value={editFields.craft_type || ''}
@@ -879,7 +1031,7 @@ export default function CaptureFlow({ toast }) {
               </div>
 
               <div className="rf-group">
-                <label className="input-label">Material</label>
+                <label className="input-label">{t('review.material', 'Material')}</label>
                 <input
                   className="input-field"
                   value={editFields.material || ''}
@@ -889,7 +1041,7 @@ export default function CaptureFlow({ toast }) {
 
               <div className="rf-row">
                 <div className="rf-group" style={{ flex: 1 }}>
-                  <label className="input-label">Production Time (days)</label>
+                  <label className="input-label">{t('review.productionTime', 'Production Time (days)')}</label>
                   <input
                     type="number"
                     className="input-field"
@@ -898,7 +1050,7 @@ export default function CaptureFlow({ toast }) {
                   />
                 </div>
                 <div className="rf-group" style={{ flex: 1 }}>
-                  <label className="input-label">Technique</label>
+                  <label className="input-label">{t('review.technique', 'Technique')}</label>
                   <input
                     className="input-field"
                     value={editFields.production_technique || ''}
@@ -908,7 +1060,26 @@ export default function CaptureFlow({ toast }) {
               </div>
 
               <div className="rf-group">
-                <label className="input-label">Description</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="input-label" style={{ margin: 0 }}>{t('market.productDesc', 'Description')}</label>
+                  {(editFields.description || product?.description) && (
+                    <button
+                      type="button"
+                      className={`tts-audio-btn ${isSpeaking ? 'speaking' : ''}`}
+                      onClick={() => {
+                        if (isSpeaking) {
+                          stopSpeaking();
+                        } else {
+                          speakText(editFields.description || product?.description, language === 'auto' ? globalLang : language);
+                        }
+                      }}
+                      title={isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen to description')}
+                    >
+                      {isSpeaking ? <VolumeX size={13} /> : <Volume2 size={13} />}
+                      <span>{isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen')}</span>
+                    </button>
+                  )}
+                </div>
                 <textarea
                   className="input-field"
                   rows={4}
@@ -918,7 +1089,7 @@ export default function CaptureFlow({ toast }) {
               </div>
 
               <div className="rf-group">
-                <label className="input-label">Keywords (comma-separated)</label>
+                <label className="input-label">{t('review.keywords', 'Keywords (comma-separated)')}</label>
                 <input
                   className="input-field"
                   value={editFields.keywords || ''}
@@ -933,7 +1104,7 @@ export default function CaptureFlow({ toast }) {
               {priceResult && dynamicPricing ? (
                 <div className="pricing-card card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-                    <h4 style={{ margin: 0 }}><DollarSign size={16} /> AI Pricing Intelligence</h4>
+                    <h4 style={{ margin: 0 }}><DollarSign size={16} /> {t('review.aiPricing', 'AI Pricing Intelligence')}</h4>
                     <span
                       className={`badge badge-${dynamicPricing.statusLevel === 'success' ? 'published' : dynamicPricing.statusLevel === 'warning' ? 'confirmed' : 'draft'}`}
                       style={{ fontSize: '0.75rem', padding: '3px 10px' }}
@@ -948,22 +1119,22 @@ export default function CaptureFlow({ toast }) {
                       <span className="pc-value">{formatPrice(dynamicPricing.currentEstCost)}</span>
                     </div>
                     <div className="pc-stat">
-                      <span className="pc-label">Market Low</span>
+                      <span className="pc-label">{t('review.marketLow', 'Market Low')}</span>
                       <span className="pc-value">{formatPrice(priceResult.market_range_low)}</span>
                     </div>
                     <div className="pc-stat">
-                      <span className="pc-label">Market High</span>
+                      <span className="pc-label">{t('review.marketHigh', 'Market High')}</span>
                       <span className="pc-value">{formatPrice(priceResult.market_range_high)}</span>
                     </div>
                     <div className="pc-stat pc-stat-primary">
-                      <span className="pc-label">AI Recommended</span>
+                      <span className="pc-label">{t('review.aiRecommended', 'AI Recommended')}</span>
                       <span className="pc-value">{formatPrice(priceResult.recommended_price)}</span>
                     </div>
                   </div>
 
                   <div className="rf-group" style={{ marginTop: 'var(--space-md)' }}>
                     <label className="input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>Your Price (₹)</span>
+                      <span>{t('review.yourPrice', 'Your Price (₹)')}</span>
                       <span style={{ fontSize: '0.72rem', color: 'var(--clr-text-muted)', fontWeight: 400 }}>
                         Recalculates confidence in real-time
                       </span>
@@ -999,7 +1170,7 @@ export default function CaptureFlow({ toast }) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--clr-text-primary)' }}>
-                        Market Sell-Through Confidence
+                        {t('review.confidenceMeter', 'Market Sell-Through Confidence')}
                       </span>
                       <span
                         style={{
@@ -1017,7 +1188,7 @@ export default function CaptureFlow({ toast }) {
                     </div>
 
                     {/* Meter bar */}
-                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: '100%', height: '6px', background: 'var(--clr-border, #E4DED3)', borderRadius: '3px', overflow: 'hidden' }}>
                       <div
                         style={{
                           width: `${dynamicPricing.dynamicConfidence}%`,
@@ -1046,7 +1217,7 @@ export default function CaptureFlow({ toast }) {
               ) : (
                 <div className="pricing-card card" style={{ textAlign: 'center', padding: 'var(--space-xl) var(--space-md)' }}>
                   <DollarSign size={28} style={{ color: 'var(--clr-accent)', margin: '0 auto var(--space-sm)' }} />
-                  <h4 style={{ justifyContent: 'center' }}>AI Pricing Intelligence</h4>
+                  <h4 style={{ justifyContent: 'center' }}>{t('review.aiPricing', 'AI Pricing Intelligence')}</h4>
                   <p style={{ fontSize: '0.82rem', color: 'var(--clr-text-secondary)' }}>
                     Pricing recommendations will be generated based on materials and labor time.
                   </p>
@@ -1057,10 +1228,10 @@ export default function CaptureFlow({ toast }) {
 
           <div className="flow-actions">
             <button className="btn btn-ghost" onClick={() => setCurrentStep(2)}>
-              <ArrowLeft size={16} /> Back
+              <ArrowLeft size={16} /> {t('common.back', 'Back')}
             </button>
             <button className="btn btn-primary" onClick={handleConfirm}>
-              <CheckCircle size={16} /> Confirm Product
+              <CheckCircle size={16} /> {t('review.confirmBtn', 'Confirm Product')}
             </button>
           </div>
         </div>
@@ -1080,8 +1251,29 @@ export default function CaptureFlow({ toast }) {
           {!publishDone ? (
             <>
               <div className="publish-preview card">
-                <h3>{editFields.product_name || product?.product_name}</h3>
-                <p className="publish-cat">{editFields.category || product?.category}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>{editFields.product_name || product?.product_name}</h3>
+                    <p className="publish-cat">{editFields.category || product?.category}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`tts-audio-btn ${isSpeaking ? 'speaking' : ''}`}
+                    onClick={() => {
+                      if (isSpeaking) {
+                        stopSpeaking();
+                      } else {
+                        const name = editFields.product_name || product?.product_name || '';
+                        const desc = editFields.description || product?.description || '';
+                        speakText(`${name}. ${desc}`, language === 'auto' ? globalLang : language);
+                      }
+                    }}
+                    title={isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen to product summary')}
+                  >
+                    {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                    <span>{isSpeaking ? t('tts.stop', 'Stop') : t('tts.listen', 'Listen')}</span>
+                  </button>
+                </div>
                 <p className="publish-price">{formatPrice(editFields.recommended_price || product?.pricing?.recommended_price)}</p>
                 <p className="publish-desc">{(editFields.description || product?.description || '').slice(0, 150)}...</p>
               </div>

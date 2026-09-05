@@ -2,8 +2,8 @@
   position: fixed;
   inset: 0;
   z-index: 5000;
-  background: rgba(12, 10, 9, 0.8);
-  backdrop-filter: blur(8px);
+  background: rgba(19, 25, 33, 0.65);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,8 +13,12 @@
 .loading-card {
   text-align: center;
   padding: var(--space-2xl) var(--space-xl);
-  max-width: 320px;
+  max-width: 340px;
   width: 100%;
+  background: #FFFFFF;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 16px rgba(15, 17, 17, 0.18);
 }
 
 .loading-spinner-wrap {
@@ -28,8 +32,8 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 2px solid var(--clr-border);
-  border-top-color: var(--clr-accent);
+  border: 2.5px solid var(--clr-border);
+  border-top-color: var(--clr-accent); /* #FF9900 */
   animation: spin 1.2s linear infinite;
 }
 
@@ -65,25 +69,26 @@
 }
 
 .loading-step.active {
-  color: var(--clr-accent);
+  color: var(--clr-accent); /* #FF9900 */
+  font-weight: 600;
 }
 
 .loading-step.done {
-  color: var(--clr-success);
+  color: var(--clr-success); /* #067D62 */
 }
 
 .loading-step-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--clr-text-muted);
+  background: var(--clr-border);
   flex-shrink: 0;
   transition: all var(--duration-normal);
 }
 
 .loading-step.active .loading-step-dot {
   background: var(--clr-accent);
-  box-shadow: 0 0 8px var(--clr-accent-glow);
+  box-shadow: none;
   animation: pulse 1.5s ease-in-out infinite;
 }
 

@@ -41,7 +41,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-lg);
-  background: var(--clr-bg-card);
+  background: #FFFFFF;
   border: 1px solid var(--clr-border);
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -49,6 +49,7 @@
   font-family: var(--font-body);
   transition: all var(--duration-normal) var(--ease-out);
   width: 100%;
+  box-shadow: var(--shadow-sm);
 }
 
 .dashboard-action-card:hover {
@@ -64,8 +65,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #000;
+  color: #17202A;
+  background: #EAEDED;
+  border: 1px solid var(--clr-border);
   flex-shrink: 0;
+}
+
+.dashboard-action-card:hover .dac-icon {
+  background: rgba(255, 153, 0, 0.15);
+  color: var(--clr-accent-hover);
+  border-color: var(--clr-accent);
 }
 
 .dac-content {
@@ -74,7 +83,7 @@
 
 .dac-content h3 {
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--clr-text-primary);
   margin-bottom: 3px;
 }
@@ -115,7 +124,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: 14px 18px;
-  background: var(--clr-bg-card);
+  background: #FFFFFF;
   border: 1px solid var(--clr-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -132,21 +141,21 @@
 }
 
 .stat-icon-amber {
-  background: rgba(245, 158, 11, 0.14);
+  background: rgba(255, 153, 0, 0.12);
   color: var(--clr-accent);
-  border: 1px solid rgba(245, 158, 11, 0.28);
+  border: 1px solid rgba(255, 153, 0, 0.3);
 }
 
 .stat-icon-green {
-  background: rgba(34, 197, 94, 0.14);
+  background: rgba(6, 125, 98, 0.12);
   color: var(--clr-success);
-  border: 1px solid rgba(34, 197, 94, 0.28);
+  border: 1px solid rgba(6, 125, 98, 0.3);
 }
 
 .stat-icon-terracotta {
-  background: rgba(234, 88, 12, 0.14);
-  color: var(--clr-terracotta);
-  border: 1px solid rgba(234, 88, 12, 0.28);
+  background: #EAEDED;
+  color: #17202A;
+  border: 1px solid var(--clr-border);
 }
 
 .stat-pill-info {
@@ -159,8 +168,8 @@
   font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--clr-text-muted);
+  color: var(--clr-text-secondary);
+  white-space: nowrap;
 }
 
 .stat-pill-value {
@@ -179,7 +188,10 @@
 /* ─── Studio Catalogue Card ───────────────────────────────────────────────── */
 .studio-catalogue-card {
   padding: var(--space-lg);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
+  background: #FFFFFF;
+  border: 1px solid var(--clr-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .scc-header {
@@ -228,13 +240,14 @@
 }
 
 .studio-craft-card {
-  background: var(--clr-bg-secondary);
+  background: #FFFFFF;
   border: 1px solid var(--clr-border);
   border-radius: var(--radius-md);
   overflow: hidden;
   transition: all var(--duration-fast);
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-sm);
 }
 
 .studio-craft-card:hover {
@@ -248,7 +261,7 @@
   aspect-ratio: 4 / 3;
   position: relative;
   overflow: hidden;
-  background: #111;
+  background: #FFFFFF;
 }
 
 .scc-img-wrap img {
@@ -264,27 +277,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--clr-surface);
-  color: var(--clr-text-muted);
+  background: #EAEDED;
+  color: var(--clr-text-secondary);
 }
 
 .studio-craft-card:hover .scc-img-wrap img {
-  transform: scale(1.04);
+  transform: scale(1.03);
 }
 
 .scc-status-badge {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(34, 197, 94, 0.9);
-  color: #fff;
+  background: var(--clr-success); /* #067D62 */
+  color: #FFFFFF;
   font-size: 0.68rem;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 9999px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  backdrop-filter: blur(4px);
 }
 
 .scc-craft-body {
@@ -296,7 +308,7 @@
 
 .scc-craft-name {
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--clr-text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -306,7 +318,7 @@
 
 .scc-craft-type {
   font-size: 0.75rem;
-  color: var(--clr-text-muted);
+  color: var(--clr-text-secondary);
   margin-bottom: var(--space-sm);
 }
 
@@ -322,14 +334,14 @@
 .scc-craft-price {
   font-size: 0.95rem;
   font-weight: 700;
-  color: var(--clr-accent);
+  color: var(--clr-text-primary);
 }
 
 .scc-craft-btn {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--clr-surface);
+  background: #EAEDED;
   border: 1px solid var(--clr-border);
   display: flex;
   align-items: center;
@@ -341,7 +353,7 @@
 
 .scc-craft-btn:hover {
   background: var(--clr-accent);
-  color: #000;
+  color: #17202A;
   border-color: var(--clr-accent);
 }
 
@@ -358,18 +370,18 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--clr-accent);
+  background: #EAEDED;
+  color: var(--clr-text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: var(--space-md);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  border: 1px solid var(--clr-border);
 }
 
 .scc-empty-state h4 {
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--clr-text-primary);
   margin-bottom: var(--space-xs);
 }
@@ -385,7 +397,10 @@
 /* ─── Studio Profile Card (Right Column) ─────────────────────────────────── */
 .studio-profile-card {
   padding: var(--space-xl);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
+  background: #FFFFFF;
+  border: 1px solid var(--clr-border);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -406,8 +421,8 @@
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--clr-success);
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.28);
+  background: var(--clr-success-soft);
+  border: 1px solid rgba(6, 125, 98, 0.3);
   padding: 3px 10px;
   border-radius: 9999px;
   text-transform: uppercase;
@@ -416,8 +431,8 @@
 
 .spc-status-live {
   font-size: 0.75rem;
-  color: var(--clr-accent);
-  font-weight: 500;
+  color: var(--clr-success);
+  font-weight: 600;
 }
 
 .spc-artisan-header {
@@ -432,14 +447,14 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--clr-accent), var(--clr-terracotta));
-  color: #000;
+  background: var(--clr-nav-primary); /* #131921 */
+  color: var(--clr-accent); /* #FF9900 */
+  border: 2px solid var(--clr-nav-secondary);
   font-size: 1.35rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px var(--clr-accent-glow);
   flex-shrink: 0;
 }
 
@@ -459,7 +474,7 @@
 }
 
 .spc-details-box {
-  background: var(--clr-surface);
+  background: #EAEDED;
   border: 1px solid var(--clr-border);
   border-radius: var(--radius-md);
   padding: var(--space-md);
@@ -476,7 +491,7 @@
 }
 
 .spc-detail-label {
-  color: var(--clr-text-muted);
+  color: var(--clr-text-secondary);
 }
 
 .spc-detail-val {
@@ -512,8 +527,8 @@
 .spc-quick-tip {
   margin-top: var(--space-xs);
   padding: var(--space-md);
-  background: rgba(245, 158, 11, 0.06);
-  border: 1px dashed rgba(245, 158, 11, 0.25);
+  background: #EAEDED;
+  border: 1px dashed var(--clr-border-strong);
   border-radius: var(--radius-md);
 }
 
@@ -523,4 +538,3 @@
   line-height: 1.45;
   margin: 0;
 }
-

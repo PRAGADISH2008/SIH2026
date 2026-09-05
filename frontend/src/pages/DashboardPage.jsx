@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { listProducts } from '../services/api';
 import { resolveImageUrl } from '../utils/helpers';
 import { BACKEND_ORIGIN } from '../config';
@@ -14,6 +15,7 @@ import './DashboardPage.css';
 
 export default function DashboardPage() {
   const { artisan, artisanId } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
@@ -75,8 +77,8 @@ export default function DashboardPage() {
   return (
     <div className="page dashboard-page">
       <div className="page-header animate-fade-in">
-        <p className="page-subtitle">Welcome back, {displayName}</p>
-        <h1 className="page-title">Your Creative Studio</h1>
+        <p className="page-subtitle">{t('dash.welcome', 'Welcome back')}, {displayName}</p>
+        <h1 className="page-title">{t('dash.myCrafts', 'Your Creative Studio')}</h1>
       </div>
 
       <div className="dashboard-container">
@@ -92,8 +94,8 @@ export default function DashboardPage() {
                 <Camera size={28} />
               </div>
               <div className="dac-content">
-                <h3>New Product</h3>
-                <p>Capture, describe & publish a craft</p>
+                <h3>{t('dash.newCraft', 'New Product')}</h3>
+                <p>{t('dash.newCraftSub', 'Capture, describe & publish a craft')}</p>
               </div>
               <ArrowRight size={18} className="dac-arrow" />
             </button>
@@ -106,8 +108,8 @@ export default function DashboardPage() {
                 <ShoppingBag size={28} />
               </div>
               <div className="dac-content">
-                <h3>Marketplace</h3>
-                <p>Browse live artisan handicrafts</p>
+                <h3>{t('nav.marketplace', 'Marketplace')}</h3>
+                <p>{t('dash.marketplaceSub', 'Browse live artisan handicrafts')}</p>
               </div>
               <ArrowRight size={18} className="dac-arrow" />
             </button>
@@ -120,7 +122,7 @@ export default function DashboardPage() {
                 <Package size={20} />
               </div>
               <div className="stat-pill-info">
-                <span className="stat-pill-label">Live Listings</span>
+                <span className="stat-pill-label">{t('dash.totalCrafts', 'Live Listings')}</span>
                 <span className="stat-pill-value">{displayCrafts.length}</span>
               </div>
             </div>
@@ -130,7 +132,7 @@ export default function DashboardPage() {
                 <TrendingUp size={20} />
               </div>
               <div className="stat-pill-info">
-                <span className="stat-pill-label">Catalogue Value</span>
+                <span className="stat-pill-label">{t('dash.catValue', 'Catalogue Value')}</span>
                 <span className="stat-pill-value">₹{totalValue.toLocaleString('en-IN')}</span>
               </div>
             </div>
@@ -140,7 +142,7 @@ export default function DashboardPage() {
                 <MapPin size={20} />
               </div>
               <div className="stat-pill-info">
-                <span className="stat-pill-label">Craft Region</span>
+                <span className="stat-pill-label">{t('dash.craftRegion', 'Craft Region')}</span>
                 <span className="stat-pill-value stat-pill-truncate" title={region}>{region}</span>
               </div>
             </div>
@@ -150,14 +152,14 @@ export default function DashboardPage() {
           <div className="studio-catalogue-card glass-card animate-fade-in-up">
             <div className="scc-header">
               <div>
-                <h3 className="scc-title">My Published Crafts</h3>
-                <p className="scc-subtitle">Real-time view of your crafts live on the ZenCraft Marketplace</p>
+                <h3 className="scc-title">{t('dash.myCrafts', 'My Published Crafts')}</h3>
+                <p className="scc-subtitle">{t('dash.catalogueSub', 'Real-time view of your crafts live on the ZenCraft Marketplace')}</p>
               </div>
               <button
                 className="btn btn-secondary btn-sm scc-view-all"
                 onClick={() => navigate('/marketplace')}
               >
-                <span>View in Marketplace</span>
+                <span>{t('dash.viewMarket', 'View in Marketplace')}</span>
                 <ExternalLink size={14} />
               </button>
             </div>
@@ -210,14 +212,14 @@ export default function DashboardPage() {
                 <div className="scc-empty-icon">
                   <Package size={36} />
                 </div>
-                <h4>No Crafts Published Yet</h4>
-                <p>Capture your first handmade creation using our AI camera and voice assistant to publish to the marketplace.</p>
+                <h4>{t('dash.noCrafts', 'No Crafts Published Yet')}</h4>
+                <p>{t('dash.noCraftsDesc', 'Capture your first handmade creation using our AI camera and voice assistant to publish to the marketplace.')}</p>
                 <button
                   className="btn btn-primary btn-md"
                   onClick={() => navigate('/capture')}
                 >
                   <Plus size={16} />
-                  <span>Catalog Your First Craft</span>
+                  <span>{t('dash.catalogFirst', 'Catalog Your First Craft')}</span>
                 </button>
               </div>
             )}
@@ -229,9 +231,9 @@ export default function DashboardPage() {
           <div className="card studio-profile-card">
             <div className="spc-badge-row">
               <span className="spc-verified-badge">
-                <ShieldCheck size={14} /> Verified Artisan
+                <ShieldCheck size={14} /> {t('dash.verifiedArtisan', 'Verified Artisan')}
               </span>
-              <span className="spc-status-live">● Active on ZenCraft</span>
+              <span className="spc-status-live">● {t('dash.activeOnZen', 'Active on ZenCraft')}</span>
             </div>
 
             <div className="spc-artisan-header">
@@ -248,19 +250,19 @@ export default function DashboardPage() {
 
             <div className="spc-details-box">
               <div className="spc-detail-row">
-                <span className="spc-detail-label">Buyer Contact</span>
+                <span className="spc-detail-label">{t('dash.buyerContact', 'Buyer Contact')}</span>
                 <span className="spc-detail-val">
                   <Phone size={13} /> {phone || 'Not registered'}
                 </span>
               </div>
               <div className="spc-detail-row">
-                <span className="spc-detail-label">Marketplace Status</span>
+                <span className="spc-detail-label">{t('dash.marketStatus', 'Marketplace Status')}</span>
                 <span className="spc-detail-val spc-status-ok">
-                  <CheckCircle2 size={13} /> Direct WhatsApp Ready
+                  <CheckCircle2 size={13} /> {t('dash.directWaReady', 'Direct WhatsApp Ready')}
                 </span>
               </div>
               <div className="spc-detail-row">
-                <span className="spc-detail-label">Studio ID</span>
+                <span className="spc-detail-label">{t('dash.studioId', 'Studio ID')}</span>
                 <span className="spc-detail-val font-mono">
                   {artisanId ? `${artisanId.slice(0, 10)}…` : 'Verified'}
                 </span>
@@ -276,7 +278,7 @@ export default function DashboardPage() {
                   className="btn btn-success btn-block spc-share-btn"
                 >
                   <MessageSquare size={16} />
-                  <span>Share Studio on WhatsApp</span>
+                  <span>{t('dash.shareWhatsApp', 'Share Studio on WhatsApp')}</span>
                 </a>
               )}
 
@@ -286,13 +288,13 @@ export default function DashboardPage() {
                 onClick={handleCopyShareLink}
               >
                 {copied ? <Check size={16} style={{ color: 'var(--clr-success)' }} /> : <Copy size={16} />}
-                <span>{copied ? 'Catalogue Link Copied!' : 'Copy Marketplace Link'}</span>
+                <span>{copied ? t('dash.linkCopied', 'Catalogue Link Copied!') : t('dash.copyLink', 'Copy Marketplace Link')}</span>
               </button>
             </div>
 
             <div className="spc-quick-tip">
               <p>
-                💡 <strong>Artisan Tip:</strong> When buyers discover your craft in the marketplace, they can contact your registered phone directly via WhatsApp or Phone call.
+                💡 <strong>{t('dash.verifiedArtisan', 'Artisan Tip')}:</strong> {t('dash.artisanTip', 'When buyers discover your craft in the marketplace, they can contact your registered phone directly via WhatsApp or Phone call.')}
               </p>
             </div>
           </div>

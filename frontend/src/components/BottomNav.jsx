@@ -1,10 +1,12 @@
 import { NavLink } from 'react-router-dom';
 import { Camera, ShoppingBag, LayoutGrid, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import './BottomNav.css';
 
 export default function BottomNav() {
   const { isAuthenticated, isArtisan } = useAuth();
+  const { t } = useLanguage();
 
   return (
     <nav className="bottom-nav">
@@ -15,7 +17,7 @@ export default function BottomNav() {
             className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
           >
             <LayoutGrid size={20} />
-            <span>Studio</span>
+            <span>{t('bnav.studio', 'Studio')}</span>
           </NavLink>
         )}
         {isAuthenticated && isArtisan && (
@@ -26,7 +28,7 @@ export default function BottomNav() {
             <div className="capture-btn-ring">
               <Camera size={22} />
             </div>
-            <span>Capture</span>
+            <span>{t('bnav.capture', 'Capture')}</span>
           </NavLink>
         )}
         <NavLink
@@ -34,7 +36,7 @@ export default function BottomNav() {
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
         >
           <ShoppingBag size={20} />
-          <span>Market</span>
+          <span>{t('bnav.marketplace', 'Market')}</span>
         </NavLink>
         {!isAuthenticated && (
           <NavLink
@@ -42,7 +44,7 @@ export default function BottomNav() {
             className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
           >
             <LogIn size={20} />
-            <span>Login</span>
+            <span>{t('nav.login', 'Login')}</span>
           </NavLink>
         )}
       </div>

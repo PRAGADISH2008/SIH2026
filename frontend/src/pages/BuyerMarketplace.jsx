@@ -5,10 +5,11 @@ import { BACKEND_ORIGIN } from '../config';
 import { resolveImageUrl, formatPrice } from '../utils/helpers';
 import StatusBadge from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   Search, Filter, ShoppingBag, Star, X,
   ChevronDown, Tag, Clock, Sparkles, LayoutGrid, PlusCircle, CheckCircle2,
-  Phone, MessageSquare, MapPin, Share2, Printer
+  Phone, MessageSquare, MapPin, Share2, Printer, Volume2, VolumeX
 } from 'lucide-react';
 import './BuyerMarketplace.css';
 
@@ -16,6 +17,7 @@ export default function BuyerMarketplace({ toast }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, isArtisan } = useAuth();
+  const { language, t, speakText, isSpeaking, stopSpeaking } = useLanguage();
   const justPublished = location.state?.justPublished;
   const publishedName = location.state?.productName;
   const [bannerVisible, setBannerVisible] = useState(Boolean(justPublished));
@@ -388,7 +390,7 @@ export default function BuyerMarketplace({ toast }) {
           <input
             type="text"
             className="market-search-input"
-            placeholder="Search by craft, material, artisan, or region (e.g. Tenkasi, bamboo, Ahilan)..."
+            placeholder={t('market.searchPlaceholder', 'Search by craft, material, artisan, or region (e.g. Tenkasi, bamboo, Ahilan)...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -412,10 +414,10 @@ export default function BuyerMarketplace({ toast }) {
             className={`btn btn-secondary btn-sm ${showFilters ? 'active' : ''}`}
             onClick={() => setShowFilters(!showFilters)}
           >
-            <Filter size={14} /> Filters
+            <Filter size={14} /> {t('market.filters', 'Filters')}
             <ChevronDown size={14} style={{ transform: showFilters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
           </button>
-          <span className="market-count">{products.length} product{products.length !== 1 ? 's' : ''}</span>
+          <span className="market-count">{products.length} {t('market.productsCount', 'products')}</span>
         </div>
 
         {/* Studio buttons visible ONLY to Artisans */}
@@ -426,14 +428,14 @@ export default function BuyerMarketplace({ toast }) {
               onClick={() => navigate('/dashboard')}
               title="Return to Artisan Studio"
             >
-              <LayoutGrid size={14} /> Artisan Studio
+              <LayoutGrid size={14} /> {t('market.artisanStudio', 'Artisan Studio')}
             </button>
             <button
               className="btn btn-primary btn-sm market-newcraft-btn"
               onClick={() => navigate('/capture')}
               title="Add New Craft"
             >
-              <PlusCircle size={14} /> New Craft
+              <PlusCircle size={14} /> {t('market.newCraft', 'New Craft')}
             </button>
           </div>
         )}
@@ -443,7 +445,7 @@ export default function BuyerMarketplace({ toast }) {
         <div className="filter-panel card animate-fade-in">
           <div className="filter-grid">
             <div className="rf-group">
-              <label className="input-label">Category</label>
+              <label className="input-label">{t('market.category', 'Category')}</label>
               <input
                 className="input-field"
                 placeholder="e.g. Paintings & Wall Art"
@@ -452,7 +454,7 @@ export default function BuyerMarketplace({ toast }) {
               />
             </div>
             <div className="rf-group">
-              <label className="input-label">Craft Type</label>
+              <label className="input-label">{t('market.craftType', 'Craft Type')}</label>
               <input
                 className="input-field"
                 placeholder="e.g. Madhubani Painting"
@@ -461,7 +463,7 @@ export default function BuyerMarketplace({ toast }) {
               />
             </div>
             <div className="rf-group">
-              <label className="input-label">Min Price (₹)</label>
+              <label className="input-label">{t('market.minPrice', 'Min Price (₹)')}</label>
               <input
                 type="number"
                 className="input-field"
@@ -471,7 +473,7 @@ export default function BuyerMarketplace({ toast }) {
               />
             </div>
             <div className="rf-group">
-              <label className="input-label">Max Price (₹)</label>
+              <label className="input-label">{t('market.maxPrice', 'Max Price (₹)')}</label>
               <input
                 type="number"
                 className="input-field"
@@ -482,9 +484,9 @@ export default function BuyerMarketplace({ toast }) {
             </div>
           </div>
           <div className="filter-actions">
-            <button className="btn btn-ghost btn-sm" onClick={clearFilters}>Clear</button>
+            <button className="btn btn-ghost btn-sm" onClick={clearFilters}>{t('market.clear', 'Clear')}</button>
             <button className="btn btn-primary btn-sm" onClick={handleFilterApply}>
-              <Search size={14} /> Apply Filters
+              <Search size={14} /> {t('market.applyFilters', 'Apply Filters')}
             </button>
           </div>
         </div>
@@ -505,7 +507,7 @@ export default function BuyerMarketplace({ toast }) {
       ) : products.length === 0 ? (
         <div className="market-empty animate-fade-in">
           <ShoppingBag size={48} strokeWidth={1} />
-          <h3>No products found</h3>
+          <h3>{t('market.noProducts', 'No products found')}</h3>
           <p>{searchQuery ? `No crafts matching "${searchQuery}"` : 'Published products will appear here'}</p>
         </div>
       ) : (
@@ -531,7 +533,7 @@ export default function BuyerMarketplace({ toast }) {
                 <div className="pc-body">
                   <h3 className="pc-title">{p.product_name || 'Untitled Craft'}</h3>
                   <div className="pc-artisan-by">
-                    <span className="pc-by-label">By</span>
+                    <span className="pc-by-label">{t('market.by', 'By')}</span>
                     <span className="pc-artisan-name">{p.artisan_name || 'Master Artisan'}</span>
                     {p.artisan_region && (
                       <span className="pc-artisan-region" title={`Origin: ${p.artisan_region}`}>
@@ -577,7 +579,7 @@ export default function BuyerMarketplace({ toast }) {
                         <h2 className="detail-title">{p.product_name || 'Untitled'}</h2>
                         <div className="detail-artisan-badge-row">
                           <div className="detail-artisan-badge">
-                            <span className="detail-artisan-label">Artisan:</span>
+                            <span className="detail-artisan-label">{t('market.artisanLabel', 'Artisan:')}</span>
                             <span className="detail-artisan-name">✨ {p.artisan_name || 'Master Artisan'}</span>
                           </div>
                           {p.artisan_region && (
@@ -612,18 +614,35 @@ export default function BuyerMarketplace({ toast }) {
                         <span className="detail-meta-item"><Star size={12} /> {p.material}</span>
                       )}
                       {p.production?.time_days && (
-                        <span className="detail-meta-item"><Clock size={12} /> {p.production.time_days} days</span>
+                        <span className="detail-meta-item"><Clock size={12} /> {p.production.time_days} {t('market.days', 'days')}</span>
                       )}
                     </div>
 
                     {p.description && (
                       <div className="detail-desc-block">
-                        <h4 className="detail-desc-heading">Product Description</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <h4 className="detail-desc-heading" style={{ margin: 0 }}>{t('market.productDesc', 'Product Description')}</h4>
+                          <button
+                            type="button"
+                            className={`tts-audio-btn ${isSpeaking ? 'speaking' : ''}`}
+                            onClick={() => {
+                              if (isSpeaking) {
+                                stopSpeaking();
+                              } else {
+                                speakText(`${p.product_name || ''}. ${p.description}`, language);
+                              }
+                            }}
+                            title={isSpeaking ? t('tts.stop', 'Stop reading') : t('tts.listen', 'Read description aloud')}
+                          >
+                            {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                            <span>{isSpeaking ? t('tts.stop', 'Stop') : t('market.listen', 'Listen (Voice)')}</span>
+                          </button>
+                        </div>
                         <p className="detail-desc">{p.description}</p>
                         <div className="detail-artisan-signature">
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', width: '100%' }}>
                             <div>
-                              <span className="detail-sig-label">Authentic craft published by: </span>
+                              <span className="detail-sig-label">{t('market.publishedBy', 'Authentic craft published by:')} </span>
                               <strong className="detail-sig-name">
                                 🎨 {p.artisan_name || 'Master Artisan'}
                                 {p.artisan_region ? ` (${p.artisan_region})` : ''}
@@ -637,7 +656,7 @@ export default function BuyerMarketplace({ toast }) {
                                   style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '0.78rem' }}
                                   title="Call artisan"
                                 >
-                                  <Phone size={12} /> Call: {p.artisan_phone}
+                                  <Phone size={12} /> {t('market.call', 'Call')}: {p.artisan_phone}
                                 </a>
                                 <a
                                   href={`https://wa.me/${p.artisan_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${p.artisan_name || 'Artisan'}, I am interested in your craft "${p.product_name || 'Product'}" on ZenCraft.`)}`}
@@ -647,7 +666,7 @@ export default function BuyerMarketplace({ toast }) {
                                   style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '0.78rem' }}
                                   title="Contact artisan on WhatsApp"
                                 >
-                                  <MessageSquare size={12} /> WhatsApp
+                                  <MessageSquare size={12} /> {t('market.whatsapp', 'WhatsApp')}
                                 </a>
                               </div>
                             )}
@@ -667,11 +686,11 @@ export default function BuyerMarketplace({ toast }) {
                     {p.pricing && (
                       <div className="detail-pricing">
                         <div className="dp-row">
-                          <span>Market Range</span>
+                          <span>{t('market.marketRange', 'Market Range')}</span>
                           <span>{formatPrice(p.pricing.market_range_low)} — {formatPrice(p.pricing.market_range_high)}</span>
                         </div>
                         <div className="dp-row">
-                          <span>Est. Material Cost</span>
+                          <span>{t('market.estMaterialCost', 'Est. Material Cost')}</span>
                           <span>{formatPrice(p.pricing.estimated_cost)}</span>
                         </div>
                         {p.pricing.reasoning?.length > 0 && (
@@ -692,7 +711,7 @@ export default function BuyerMarketplace({ toast }) {
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '11px 16px' }}
                         title="Share or download product dossier as PDF"
                       >
-                        <Share2 size={16} /> Share Details
+                        <Share2 size={16} /> {t('market.shareDetails', 'Share Details')}
                       </button>
                       <button
                         className="btn btn-secondary"

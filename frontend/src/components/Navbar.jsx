@@ -1,17 +1,34 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import './Navbar.css';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   LogOut, Palette, Wifi, Sparkles, LogIn,
-  LayoutGrid, Camera, ShoppingBag, User
+  LayoutGrid, Camera, ShoppingBag, User, Globe, ChevronDown
 } from 'lucide-react';
 import { getMockMode, setMockMode } from '../config';
 
 export default function Navbar() {
   const { isAuthenticated, user, isArtisan, isBuyer, logout } = useAuth();
+  const { language, setLanguage, t, currentLangObj, supportedLanguages } = useLanguage();
   const navigate = useNavigate();
   const [isMock, setIsMock] = useState(getMockMode());
+  const [langOpen, setLangOpen] = useState(false);
+  const langDropdownRef = useRef(null);
+
+  // Close language menu on click outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
+        setLangOpen(false);
+      }
+    }
+    if (langOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [langOpen]);
 
   const handleLogout = () => {
     logout();
@@ -37,7 +54,7 @@ export default function Navbar() {
           </div>
           <div>
             <div className="navbar-title">ZenCraft</div>
-            <div className="navbar-tagline">Artisan AI Studio</div>
+            <div className="navbar-tagline">{t('nav.tagline', 'Artisan AI Studio')}</div>
           </div>
         </Link>
 
@@ -50,14 +67,14 @@ export default function Navbar() {
                 className={({ isActive }) => `navbar-nav-link ${isActive ? 'active' : ''}`}
               >
                 <LayoutGrid size={16} />
-                <span>Studio</span>
+                <span>{t('nav.studio', 'Studio')}</span>
               </NavLink>
               <NavLink
                 to="/capture"
                 className={({ isActive }) => `navbar-nav-link ${isActive ? 'active' : ''}`}
               >
                 <Camera size={16} />
-                <span>Capture</span>
+                <span>{t('nav.capture', 'Capture')}</span>
               </NavLink>
             </>
           )}
@@ -66,11 +83,49 @@ export default function Navbar() {
             className={({ isActive }) => `navbar-nav-link ${isActive ? 'active' : ''}`}
           >
             <ShoppingBag size={16} />
-            <span>Marketplace</span>
+            <span>{t('nav.marketplace', 'Marketplace')}</span>
           </NavLink>
         </div>
 
         <div className="navbar-right">
+          {/* Global Regional Language Switcher */}
+          <div className="navbar-lang-container" ref={langDropdownRef}>
+            <button
+              type="button"
+              className="navbar-lang-btn"
+              onClick={() => setLangOpen(!langOpen)}
+              title="Change Language / மொழியை மாற்றவும்"
+            >
+              <Globe size={14} />
+              <span className="navbar-lang-name">{currentLangObj.native}</span>
+              <ChevronDown size={12} className={langOpen ? 'icon-rotate' : ''} />
+            </button>
+
+            {langOpen && (
+              <div className="navbar-lang-dropdown animate-fade-in">
+                <div className="nld-header">
+                  <span>🌐 Regional Languages</span>
+                </div>
+                <div className="nld-list">
+                  {supportedLanguages.map((l) => (
+                    <button
+                      key={l.code}
+                      type="button"
+                      className={`nld-option ${language === l.code ? 'active' : ''}`}
+                      onClick={() => {
+                        setLanguage(l.code);
+                        setLangOpen(false);
+                      }}
+                    >
+                      <span className="nld-native">{l.native}</span>
+                      <span className="nld-english">{l.english}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Mode Switch */}
           <button
             className={`navbar-mode-btn ${isMock ? 'mode-mock' : 'mode-live'}`}
@@ -80,12 +135,12 @@ export default function Navbar() {
             {isMock ? (
               <>
                 <Sparkles size={13} />
-                <span>Demo Mode</span>
+                <span>{t('nav.demo', 'Demo Mode')}</span>
               </>
             ) : (
               <>
                 <Wifi size={13} />
-                <span>Live API (5000)</span>
+                <span>{t('nav.live', 'Live API (5000)')}</span>
               </>
             )}
           </button>
@@ -99,7 +154,7 @@ export default function Navbar() {
                 </div>
                 <span className="nub-name">{displayName}{roleLabel}</span>
               </div>
-              <button className="navbar-action" onClick={handleLogout} title="Sign Out">
+              <button className="navbar-action" onClick={handleLogout} title={t('nav.logout', 'Sign Out')}>
                 <LogOut size={17} />
               </button>
             </div>
@@ -110,7 +165,7 @@ export default function Navbar() {
               style={{ padding: '6px 14px', fontSize: '0.82rem', gap: 6 }}
             >
               <LogIn size={14} />
-              <span>Login</span>
+              <span>{t('nav.login', 'Login')}</span>
             </Link>
           )}
         </div>
