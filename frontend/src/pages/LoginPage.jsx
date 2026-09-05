@@ -12,10 +12,12 @@ import {
   CheckCircle2, Phone, MapPin, ShoppingBag, Palette, ArrowRight,
   Play, X
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import './LoginPage.css';
 
 export default function LoginPage({ toast }) {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [portal, setPortal] = useState('select'); // 'select' | 'artisan' | 'buyer'
@@ -193,9 +195,9 @@ export default function LoginPage({ toast }) {
                 />
               </div>
 
-              <h2 className="role-select-title">Choose Your Portal</h2>
+              <h2 className="role-select-title">{t('login.choosePortal', 'Choose Your Portal')}</h2>
               <p className="role-select-desc">
-                Select how you would like to enter ZenCraft
+                {t('login.choosePortalSub', 'Select how you would like to enter ZenCraft')}
               </p>
 
               <div className="role-cards-row">
@@ -210,9 +212,9 @@ export default function LoginPage({ toast }) {
                     </div>
                     <ArrowRight size={18} className="role-card-arrow" />
                   </div>
-                  <div className="role-card-title">Artisan Portal</div>
+                  <div className="role-card-title">{t('login.artisanPortalTitle', 'Artisan Portal')}</div>
                   <div className="role-card-subtitle">
-                    For creators, weavers & craftspeople. Access AI camera enhancement, voice storytelling, fair pricing & studio.
+                    {t('login.artisanPortalDesc', 'For creators, weavers & craftspeople. Access AI camera enhancement, voice storytelling, fair pricing & studio.')}
                   </div>
                 </button>
 
@@ -227,9 +229,9 @@ export default function LoginPage({ toast }) {
                     </div>
                     <ArrowRight size={18} className="role-card-arrow" />
                   </div>
-                  <div className="role-card-title">User / Buyer Portal</div>
+                  <div className="role-card-title">{t('login.buyerPortalTitle', 'User / Buyer Portal')}</div>
                   <div className="role-card-subtitle">
-                    For customers & craft enthusiasts. Discover authentic handicrafts, verify fair pricing & contact artisans directly.
+                    {t('login.buyerPortalDesc', 'For customers & craft enthusiasts. Discover authentic handicrafts, verify fair pricing & contact artisans directly.')}
                   </div>
                 </button>
               </div>
@@ -245,7 +247,7 @@ export default function LoginPage({ toast }) {
                   <span className="login-overview-icon">
                     <Play size={13} fill="currentColor" />
                   </span>
-                  <span>Watch Overview</span>
+                  <span>{t('login.watchOverview', 'Watch Overview')}</span>
                 </button>
               </div>
             </div>
@@ -255,14 +257,14 @@ export default function LoginPage({ toast }) {
               <div className="portal-header-row">
                 <span className="portal-current-pill">
                   {portal === 'artisan' ? <Palette size={13} /> : <ShoppingBag size={13} />}
-                  <span>{portal === 'artisan' ? 'Artisan Studio' : 'Buyer / User'}</span>
+                  <span>{portal === 'artisan' ? t('login.artisanStudio', 'Artisan Studio') : t('login.buyerUser', 'Buyer / User')}</span>
                 </span>
                 <button
                   type="button"
                   className="portal-switch-btn"
                   onClick={() => setPortal('select')}
                 >
-                  ← Switch Portal
+                  ← {t('login.switchPortal', 'Switch Portal')}
                 </button>
               </div>
 
@@ -273,7 +275,7 @@ export default function LoginPage({ toast }) {
                   onClick={() => setMode('login')}
                 >
                   <LogIn size={16} />
-                  <span>Sign In</span>
+                  <span>{t('login.signInTab', 'Sign In')}</span>
                 </button>
                 <button
                   type="button"
@@ -281,7 +283,7 @@ export default function LoginPage({ toast }) {
                   onClick={() => setMode('register')}
                 >
                   <UserPlus size={16} />
-                  <span>Create Account</span>
+                  <span>{t('login.createAccountTab', 'Create Account')}</span>
                 </button>
               </div>
 
@@ -289,16 +291,16 @@ export default function LoginPage({ toast }) {
                 <form onSubmit={handleLogin} className="login-form">
                   <h2 className="login-card-title">
                     <User size={18} />
-                    {portal === 'artisan' ? 'Artisan Sign In' : 'Buyer Sign In'}
+                    {portal === 'artisan' ? t('login.artisanSignInTitle', 'Artisan Sign In') : t('login.buyerSignInTitle', 'Buyer Sign In')}
                   </h2>
                   <p className="login-card-desc">
                     {portal === 'artisan'
-                      ? 'Sign in to your creative studio to catalog and publish products'
-                      : 'Sign in to explore handicrafts and connect directly with master artisans'}
+                      ? t('login.artisanSignInDesc', 'Sign in to your creative studio to catalog and publish products')
+                      : t('login.buyerSignInDesc', 'Sign in to explore handicrafts and connect directly with master artisans')}
                   </p>
 
                   <div className="login-field-group">
-                    <label className="input-label" htmlFor="login-username">Username</label>
+                    <label className="input-label" htmlFor="login-username">{t('login.username', 'Username')}</label>
                     <div className="login-input-container">
                       <User size={16} className="login-input-icon" />
                       <input
@@ -315,7 +317,7 @@ export default function LoginPage({ toast }) {
                   </div>
 
                   <div className="login-field-group">
-                    <label className="input-label" htmlFor="login-password">Password</label>
+                    <label className="input-label" htmlFor="login-password">{t('login.password', 'Password')}</label>
                     <div className="login-input-container">
                       <Lock size={16} className="login-input-icon" />
                       <input
@@ -345,11 +347,11 @@ export default function LoginPage({ toast }) {
                     className="btn btn-primary btn-block btn-lg"
                     disabled={loading}
                   >
-                    {loading ? 'Signing in...' : `Sign In as ${portal === 'artisan' ? 'Artisan' : 'Buyer'}`}
+                    {loading ? t('login.signingIn', 'Signing in...') : (portal === 'artisan' ? t('login.signInAsArtisan', 'Sign In as Artisan') : t('login.signInAsBuyer', 'Sign In as Buyer'))}
                   </button>
 
                   <div className="login-divider">
-                    <span>OR</span>
+                    <span>{t('login.or', 'OR')}</span>
                   </div>
 
                   <button
@@ -357,24 +359,24 @@ export default function LoginPage({ toast }) {
                     className="btn btn-secondary btn-block demo-btn"
                     onClick={handleFillDemo}
                   >
-                    <Sparkles size={16} /> Try Demo Account ({portal === 'artisan' ? 'artisan' : 'buyer'})
+                    <Sparkles size={16} /> {t('login.tryDemo', 'Try Demo Account')} ({portal === 'artisan' ? 'artisan' : 'buyer'})
                   </button>
                 </form>
               ) : (
                 <form onSubmit={handleRegister} className="login-form">
                   <h2 className="login-card-title">
                     <UserPlus size={18} />
-                    {portal === 'artisan' ? 'Create Artisan Account' : 'Create Buyer Account'}
+                    {portal === 'artisan' ? t('login.createArtisanTitle', 'Create Artisan Account') : t('login.createBuyerTitle', 'Create Buyer Account')}
                   </h2>
                   <p className="login-card-desc">
                     {portal === 'artisan'
-                      ? 'Join our craft community and reach buyers nationwide with AI tools'
-                      : 'Create your account to discover and purchase authentic handmade treasures'}
+                      ? t('login.createArtisanDesc', 'Join our craft community and reach buyers nationwide with AI tools')
+                      : t('login.createBuyerDesc', 'Create your account to discover and purchase authentic handmade treasures')}
                   </p>
 
                   <div className="login-grid-2col">
                     <div className="login-field-group">
-                      <label className="input-label" htmlFor="reg-name">Full Name</label>
+                      <label className="input-label" htmlFor="reg-name">{t('login.fullName', 'Full Name')}</label>
                       <div className="login-input-container">
                         <User size={16} className="login-input-icon" />
                         <input
@@ -391,7 +393,7 @@ export default function LoginPage({ toast }) {
 
                     <div className="login-field-group">
                       <label className="input-label" htmlFor="reg-mobile">
-                        Mobile Number {portal === 'artisan' && <span className="label-hint">(visible in marketplace)</span>}
+                        {t('login.mobileNumber', 'Mobile Number')} {portal === 'artisan' && <span className="label-hint">{t('login.visibleInMarket', '(visible in marketplace)')}</span>}
                       </label>
                       <div className="login-input-container">
                         <Phone size={16} className="login-input-icon" />
@@ -413,7 +415,7 @@ export default function LoginPage({ toast }) {
                       <>
                         <div className="login-field-group">
                           <label className="input-label" htmlFor="reg-region">
-                            Region / Location
+                            {t('login.region', 'Region / Location')}
                           </label>
                           <div className="login-input-container">
                             <MapPin size={16} className="login-input-icon" />
@@ -430,7 +432,7 @@ export default function LoginPage({ toast }) {
                         </div>
 
                         <div className="login-field-group">
-                          <label className="input-label" htmlFor="reg-username">Username</label>
+                          <label className="input-label" htmlFor="reg-username">{t('login.username', 'Username')}</label>
                           <div className="login-input-container">
                             <User size={16} className="login-input-icon" />
                             <input
@@ -448,7 +450,7 @@ export default function LoginPage({ toast }) {
                       </>
                     ) : (
                       <div className="login-field-group login-grid-full-width">
-                        <label className="input-label" htmlFor="reg-username">Username</label>
+                        <label className="input-label" htmlFor="reg-username">{t('login.username', 'Username')}</label>
                         <div className="login-input-container">
                           <User size={16} className="login-input-icon" />
                           <input
@@ -466,7 +468,7 @@ export default function LoginPage({ toast }) {
                     )}
 
                     <div className="login-field-group">
-                      <label className="input-label" htmlFor="reg-password">Password</label>
+                      <label className="input-label" htmlFor="reg-password">{t('login.password', 'Password')}</label>
                       <div className="login-input-container">
                         <Lock size={16} className="login-input-icon" />
                         <input
@@ -491,7 +493,7 @@ export default function LoginPage({ toast }) {
                     </div>
 
                     <div className="login-field-group">
-                      <label className="input-label" htmlFor="reg-confirm">Confirm Password</label>
+                      <label className="input-label" htmlFor="reg-confirm">{t('login.confirmPassword', 'Confirm Password')}</label>
                       <div className="login-input-container">
                         <CheckCircle2 size={16} className="login-input-icon" />
                         <input
@@ -514,7 +516,7 @@ export default function LoginPage({ toast }) {
                     disabled={loading}
                     style={{ marginTop: 'var(--space-md)' }}
                   >
-                    {loading ? 'Creating Account...' : `Create ${portal === 'artisan' ? 'Artisan' : 'Buyer'} Account`}
+                    {loading ? t('login.creatingAccount', 'Creating Account...') : (portal === 'artisan' ? t('login.createArtisanBtn', 'Create Artisan Account') : t('login.createBuyerBtn', 'Create Buyer Account'))}
                   </button>
                 </form>
               )}
@@ -538,7 +540,7 @@ export default function LoginPage({ toast }) {
                 <span className="video-modal-icon-badge">
                   <Play size={12} fill="currentColor" />
                 </span>
-                <span>ZenCraft Platform Overview</span>
+                <span>{t('login.overviewModalTitle', 'ZenCraft Platform Overview')}</span>
               </div>
               <button
                 type="button"

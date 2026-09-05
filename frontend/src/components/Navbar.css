@@ -112,12 +112,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-shrink: 0;
 }
 
 .navbar-auth-group {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  flex-shrink: 0;
 }
 
 .navbar-user-badge {
@@ -172,6 +174,7 @@
   justify-content: center;
   cursor: pointer;
   transition: all var(--duration-fast);
+  flex-shrink: 0;
 }
 
 .navbar-action:hover {
@@ -311,3 +314,89 @@
   font-size: 0.72rem;
   color: #8895A0;
 }
+
+/* ─── Mobile Responsiveness & Logout Alignment ──────────────────────────────── */
+@media (max-width: 640px) {
+  .navbar-inner {
+    padding: 0 10px;
+  }
+
+  .navbar-brand {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .navbar-logo {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+  }
+
+  .navbar-title {
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+
+  .navbar-tagline {
+    display: none; /* Hide tagline on mobile so title stays neat and saves horizontal room */
+  }
+
+  .navbar-right {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .navbar-lang-btn {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    gap: 3px;
+  }
+
+  .navbar-lang-name {
+    max-width: 58px;
+  }
+
+  .navbar-mode-btn {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+    gap: 4px;
+  }
+
+  .navbar-auth-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .navbar-action {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+  }
+}
+
+@media (max-width: 440px) {
+  .navbar-mode-btn span {
+    display: none; /* Hide text on small mobile screens, keep icon clean */
+  }
+
+  .navbar-mode-btn {
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .navbar-lang-name {
+    max-width: 48px;
+  }
+
+  .navbar-right {
+    gap: 5px;
+  }
+
+  .navbar-inner {
+    padding: 0 8px;
+  }
+}
+
