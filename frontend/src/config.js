@@ -1,8 +1,13 @@
 // ─── Artisan Catalogue App — Frontend Configuration ─────────────────────────
 // The backend runs on port 5000 (from backend/.env and server.js).
 
+const defaultBackendOrigin =
+  typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? `http://${window.location.hostname}:5000`
+    : 'http://localhost:5000';
+
 export const BACKEND_ORIGIN =
-  import.meta.env.VITE_BACKEND_ORIGIN || 'http://localhost:5000';
+  import.meta.env.VITE_BACKEND_ORIGIN || defaultBackendOrigin;
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || `${BACKEND_ORIGIN}/api/v1`;

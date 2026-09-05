@@ -4,12 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import './BottomNav.css';
 
 export default function BottomNav() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isArtisan } = useAuth();
 
   return (
     <nav className="bottom-nav">
       <div className="bottom-nav-inner">
-        {isAuthenticated && (
+        {isAuthenticated && isArtisan && (
           <NavLink
             to="/dashboard"
             className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
@@ -18,7 +18,7 @@ export default function BottomNav() {
             <span>Studio</span>
           </NavLink>
         )}
-        {isAuthenticated && (
+        {isAuthenticated && isArtisan && (
           <NavLink
             to="/capture"
             className={({ isActive }) => `bottom-nav-item bottom-nav-capture ${isActive ? 'active' : ''}`}
@@ -42,7 +42,7 @@ export default function BottomNav() {
             className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
           >
             <LogIn size={20} />
-            <span>Artisan Login</span>
+            <span>Login</span>
           </NavLink>
         )}
       </div>

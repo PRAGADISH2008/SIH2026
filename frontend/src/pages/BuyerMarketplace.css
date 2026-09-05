@@ -4,7 +4,107 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-sm);
   margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.market-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .market-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .market-toolbar-left {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .market-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .market-toolbar-actions .btn {
+    flex: 1;
+    justify-content: center;
+    white-space: nowrap;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+}
+
+/* ─── Search Bar ─────────────────────────────────────────────────────────── */
+.market-search-bar {
+  margin-bottom: var(--space-md);
+  width: 100%;
+}
+
+.market-search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.market-search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--clr-accent);
+  pointer-events: none;
+}
+
+.market-search-input {
+  width: 100%;
+  padding: 11px 42px 11px 42px;
+  background: var(--clr-bg-card);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  color: var(--clr-text-primary);
+  font-size: 0.9rem;
+  transition: all var(--duration-fast);
+}
+
+.market-search-input:focus {
+  outline: none;
+  border-color: var(--clr-accent);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.market-search-clear {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--clr-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: color var(--duration-fast);
+}
+
+.market-search-clear:hover {
+  color: var(--clr-text-primary);
 }
 
 .market-count {
@@ -182,6 +282,31 @@
   border-radius: var(--radius-sm);
   padding: 1px 6px;
   font-size: 0.7rem;
+}
+
+.pc-artisan-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--clr-terracotta, #e06b3a);
+  background: rgba(234, 88, 12, 0.1);
+  border: 1px solid rgba(234, 88, 12, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-size: 0.7rem;
+}
+
+.detail-region-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(234, 88, 12, 0.12);
+  border: 1px solid rgba(234, 88, 12, 0.3);
+  color: var(--clr-terracotta, #e06b3a);
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .pc-category {

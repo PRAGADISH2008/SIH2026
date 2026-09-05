@@ -71,6 +71,8 @@ export async function loginWithPassword(username, password) {
         artisan_id: 'mock-artisan-001',
         username: username || 'artisan',
         display_name: 'Master Artisan',
+        region: 'Madurai, Tamilnadu',
+        role: 'artisan',
       },
     };
   }
@@ -80,12 +82,33 @@ export async function loginWithPassword(username, password) {
 }
 
 /**
- * Register a new artisan with Username & Password.
- * POST /api/v1/auth/register
- * Body: { username: string, password: string, display_name?: string }
- * Response: { message, token, artisan: { artisan_id, username, display_name } }
+ * Log in as Buyer/Consumer.
+ * POST /api/v1/auth/user/login
  */
-export async function registerWithPassword(username, password, displayName, mobileNumber) {
+export async function loginBuyerWithPassword(username, password) {
+  if (MOCK_MODE) {
+    await sleep(600);
+    return {
+      message: 'Login successful',
+      token: 'mock_jwt_buyer_token_' + Date.now(),
+      user: {
+        id: 'mock-buyer-001',
+        username: username || 'buyer',
+        display_name: 'Craft Buyer',
+        role: 'buyer',
+      },
+    };
+  }
+  return request('POST', '/auth/user/login', {
+    body: { username, password },
+  });
+}
+
+/**
+ * Register a new artisan with Username & Password & Region.
+ * POST /api/v1/auth/register
+ */
+export async function registerWithPassword(username, password, displayName, mobileNumber, region) {
   if (MOCK_MODE) {
     await sleep(800);
     return {
@@ -96,6 +119,8 @@ export async function registerWithPassword(username, password, displayName, mobi
         username: username,
         display_name: displayName || username,
         mobile_number: mobileNumber || null,
+        region: region || null,
+        role: 'artisan',
       },
     };
   }
@@ -105,8 +130,54 @@ export async function registerWithPassword(username, password, displayName, mobi
       password,
       display_name: displayName,
       mobile_number: mobileNumber,
+      region,
     },
   });
+}
+
+/**
+ * Register a new buyer/consumer.
+ * POST /api/v1/auth/user/register
+ */
+export async function registerBuyerWithPassword(username, password, displayName, mobileNumber) {
+  if (MOCK_MODE) {
+    await sleep(800);
+    return {
+      message: 'Buyer registration successful',
+      token: 'mock_jwt_buyer_token_' + Date.now(),
+      user: {
+        id: 'mock-buyer-' + Date.now(),
+        username: username,
+        display_name: displayName || username,
+        mobile_number: mobileNumber || null,
+        role: 'buyer',
+      },
+    };
+  }
+  return request('POST', '/auth/user/register', {
+    body: {
+      username,
+      password,
+      display_name: displayName,
+      mobile_number: mobileNumber,
+    },
+  });
+}
+
+/**
+ * Restore current session profile.
+ * GET /api/v1/auth/me
+ */
+export async function getMe() {
+  if (MOCK_MODE) {
+    return {
+      id: 'mock-001',
+      username: 'artisan',
+      display_name: 'Master Artisan',
+      role: 'artisan',
+    };
+  }
+  return request('GET', '/auth/me');
 }
 
 export async function requestOtp(mobile_number) {
@@ -282,6 +353,7 @@ export async function listProducts(filters = {}) {
     return mock.mockBuyerProducts;
   }
   const params = new URLSearchParams();
+  if (filters.search) params.set('search', filters.search);
   if (filters.category) params.set('category', filters.category);
   if (filters.craft_type) params.set('craft_type', filters.craft_type);
   if (filters.min_price) params.set('min_price', filters.min_price);

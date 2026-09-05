@@ -25,11 +25,30 @@ const storage = multer.diskStorage({
     cb(null, path.join(__dirname, '..', 'uploads'));
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    let ext = path.extname(file.originalname || '');
+    if (!ext || ext === '.') {
+      const mimeExtMap = {
+        'image/jpeg': '.jpg',
+        'image/jpg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+        'audio/webm': '.webm',
+        'audio/wav': '.wav',
+        'audio/mp3': '.mp3',
+        'audio/mpeg': '.mp3',
+        'audio/ogg': '.ogg',
+        'audio/mp4': '.m4a',
+        'audio/x-m4a': '.m4a',
+      };
+      ext = mimeExtMap[file.mimetype] || '.jpg';
+    }
     cb(null, `${uuidv4()}${ext}`);
   },
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB for raw high-res camera captures
+});
 
 // ─── Helper: fetch product row by ID ────────────────────────────────────────
 async function getProductById(productId) {

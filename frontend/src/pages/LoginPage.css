@@ -2,45 +2,82 @@
   min-height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-lg);
+  justify-content: flex-start;
+  padding: calc(var(--nav-height) + var(--space-lg)) clamp(24px, 5.5vw, 72px) calc(var(--bottom-nav-height) + var(--space-lg));
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(10, 8, 7, 0.96) 0%,
+      rgba(10, 8, 7, 0.92) 34%,
+      rgba(10, 8, 7, 0.70) 50%,
+      rgba(10, 8, 7, 0.22) 68%,
+      rgba(10, 8, 7, 0.12) 100%
+    ),
+    url('/artisan-bg.png') right center / cover no-repeat;
+  background-attachment: fixed;
 }
 
 .login-bg-pattern {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(245, 158, 11, 0.09) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 20%, rgba(234, 88, 12, 0.07) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(167, 139, 250, 0.05) 0%, transparent 50%);
+  background: radial-gradient(circle at 20% 40%, rgba(245, 158, 11, 0.07) 0%, transparent 55%);
   pointer-events: none;
 }
 
 .login-content {
   width: 100%;
-  max-width: var(--max-width-card, 460px);
+  max-width: 580px;
   position: relative;
   z-index: 1;
+  transition: max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.login-content-wide {
+  max-width: 640px;
 }
 
 .login-hero {
   text-align: center;
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-lg);
 }
 
 .login-icon-wrap {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--clr-accent), var(--clr-terracotta));
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto var(--space-md);
-  color: #000;
-  box-shadow: 0 8px 32px var(--clr-accent-glow);
+  margin: 0 auto var(--space-xs);
+  overflow: hidden;
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.7), 0 0 20px var(--clr-accent-glow);
+}
+
+.login-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.login-hero-text-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 2px 0;
+}
+
+.login-hero-text-img {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.8));
 }
 
 .login-title {
@@ -54,7 +91,7 @@
 }
 
 .login-subtitle {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--clr-text-secondary);
   margin-top: var(--space-xs);
 }
@@ -62,6 +99,11 @@
 .login-card {
   padding: var(--space-xl);
   border-radius: var(--radius-xl);
+  background: rgba(18, 14, 11, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 35px rgba(0, 0, 0, 0.5);
 }
 
 /* ─── Tab Bar ───────────────────────────────────────────────────────────── */
@@ -200,3 +242,394 @@
   border-color: var(--clr-accent-hover);
   color: #fff;
 }
+
+/* ─── Role Selection Portal Screen ────────────────────────────────────────── */
+.role-select-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.role-logo-banner {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.role-logo-banner-img {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 2px solid rgba(245, 158, 11, 0.45);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.85), 0 0 24px rgba(245, 158, 11, 0.3);
+  object-fit: cover;
+  transition: transform var(--duration-normal), box-shadow var(--duration-normal);
+}
+
+.role-logo-banner-img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.95), 0 0 32px rgba(245, 158, 11, 0.5);
+}
+
+.role-text-banner {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0 10px 0;
+  width: 100%;
+}
+
+.role-text-banner-img {
+  max-width: 280px;
+  width: 90%;
+  height: auto;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.9));
+}
+
+.role-select-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--clr-text-primary);
+  text-align: center;
+  margin-bottom: 2px;
+  letter-spacing: 0.01em;
+}
+
+.role-select-desc {
+  font-size: 0.82rem;
+  color: var(--clr-text-secondary);
+  text-align: center;
+  margin-bottom: var(--space-md);
+}
+
+/* ─── Single Row, Two Column Direction Paths ─── */
+.role-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.role-card {
+  background: rgba(26, 20, 16, 0.76);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  min-height: 160px;
+}
+
+.role-card:hover {
+  border-color: var(--clr-accent);
+  background: rgba(42, 30, 20, 0.92);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(245, 158, 11, 0.2);
+}
+
+.role-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.role-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.role-card-artisan .role-card-icon {
+  background: rgba(234, 88, 12, 0.18);
+  color: var(--clr-terracotta);
+  border: 1px solid rgba(234, 88, 12, 0.4);
+}
+
+.role-card-buyer .role-card-icon {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--clr-accent);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.role-card-title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--clr-text-primary);
+  margin-bottom: 6px;
+}
+
+.role-card-subtitle {
+  font-size: 0.77rem;
+  color: var(--clr-text-secondary);
+  line-height: 1.45;
+}
+
+.role-card-arrow {
+  color: var(--clr-text-muted);
+  transition: transform var(--duration-fast), color var(--duration-fast);
+}
+
+.role-card:hover .role-card-arrow {
+  transform: translateX(4px);
+  color: var(--clr-accent);
+}
+
+/* ─── Watch Overview Button ──────────────────────────────────────────────── */
+.login-overview-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-sm);
+  width: 100%;
+}
+
+.login-overview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: var(--clr-accent);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.login-overview-btn:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: var(--clr-accent);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 16px rgba(245, 158, 11, 0.3);
+}
+
+.login-overview-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--clr-accent);
+  color: #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--duration-fast);
+}
+
+.login-overview-btn:hover .login-overview-icon {
+  transform: scale(1.1);
+  background: #fff;
+}
+
+/* ─── Video Modal Lightbox ───────────────────────────────────────────────── */
+.video-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  box-sizing: border-box;
+}
+
+.video-modal-card {
+  width: 100%;
+  max-width: 800px;
+  background: rgba(20, 16, 13, 0.96);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(245, 158, 11, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.video-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.video-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--clr-text-primary);
+}
+
+.video-modal-icon-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--clr-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--clr-text-muted);
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast);
+}
+
+.video-modal-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.video-modal-player-wrap {
+  position: relative;
+  width: 100%;
+  background: #000;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-modal-player {
+  width: 100%;
+  height: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  outline: none;
+}
+
+.portal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--clr-border);
+}
+
+.portal-current-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--clr-accent);
+}
+
+.portal-switch-btn {
+  background: transparent;
+  border: none;
+  color: var(--clr-text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px;
+  transition: color var(--duration-fast);
+}
+
+.portal-switch-btn:hover {
+  color: var(--clr-text-primary);
+}
+
+/* ─── 2-Column Create Account Form Grid ─────────────────────────────────── */
+.login-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: var(--space-md);
+  row-gap: 2px;
+}
+
+.login-grid-full-width {
+  grid-column: 1 / -1;
+}
+
+.label-hint {
+  font-size: 0.72rem;
+  color: var(--clr-text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+@media (max-width: 860px) {
+  .login-page {
+    justify-content: center;
+    padding: calc(var(--nav-height) + var(--space-md)) var(--space-md) calc(var(--bottom-nav-height) + var(--space-md));
+    background:
+      linear-gradient(
+        rgba(10, 8, 7, 0.88),
+        rgba(10, 8, 7, 0.94)
+      ),
+      url('/artisan-bg.png') center center / cover no-repeat;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-content-wide {
+    max-width: 100%;
+  }
+
+  .login-grid-2col {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .login-grid-full-width {
+    grid-column: auto;
+  }
+
+  .role-cards-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .login-card {
+    padding: var(--space-lg);
+  }
+}
+
+

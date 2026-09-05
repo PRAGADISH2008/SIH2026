@@ -9,7 +9,7 @@ import {
 import { getMockMode, setMockMode } from '../config';
 
 export default function Navbar() {
-  const { isAuthenticated, artisan, logout } = useAuth();
+  const { isAuthenticated, user, isArtisan, isBuyer, logout } = useAuth();
   const navigate = useNavigate();
   const [isMock, setIsMock] = useState(getMockMode());
 
@@ -25,24 +25,25 @@ export default function Navbar() {
     window.location.reload();
   };
 
-  const displayName = artisan?.display_name || artisan?.username || 'Artisan';
+  const displayName = user?.display_name || user?.username || (isArtisan ? 'Artisan' : 'Buyer');
+  const roleLabel = isBuyer ? ' (Buyer)' : '';
 
   return (
     <nav className="navbar">
       <div className="navbar-inner">
         <Link to="/" className="navbar-brand" style={{ textDecoration: 'none', color: 'inherit' }}>
           <div className="navbar-logo">
-            <Palette size={22} />
+            <img src="/zencraft-logo.jpg" alt="ZenCraft" className="navbar-logo-img" />
           </div>
           <div>
-            <div className="navbar-title">KalaCraft</div>
+            <div className="navbar-title">ZenCraft</div>
             <div className="navbar-tagline">Artisan AI Studio</div>
           </div>
         </Link>
 
-        {/* Desktop / Tablet Navigation Links */}
+        {/* Desktop / Tablet Navigation Links - Studio & Capture visible ONLY to artisans */}
         <div className="navbar-desktop-nav">
-          {isAuthenticated && (
+          {isAuthenticated && isArtisan && (
             <>
               <NavLink
                 to="/dashboard"
@@ -92,11 +93,11 @@ export default function Navbar() {
           {/* User Profile / Auth Actions */}
           {isAuthenticated ? (
             <div className="navbar-auth-group">
-              <div className="navbar-user-badge" title={`Signed in as ${displayName}`}>
+              <div className="navbar-user-badge" title={`Signed in as ${displayName}${roleLabel}`}>
                 <div className="nub-avatar">
                   <User size={14} />
                 </div>
-                <span className="nub-name">{displayName}</span>
+                <span className="nub-name">{displayName}{roleLabel}</span>
               </div>
               <button className="navbar-action" onClick={handleLogout} title="Sign Out">
                 <LogOut size={17} />
@@ -109,7 +110,7 @@ export default function Navbar() {
               style={{ padding: '6px 14px', fontSize: '0.82rem', gap: 6 }}
             >
               <LogIn size={14} />
-              <span>Artisan Login</span>
+              <span>Login</span>
             </Link>
           )}
         </div>

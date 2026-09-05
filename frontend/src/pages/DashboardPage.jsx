@@ -1,8 +1,14 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { listProducts } from '../services/api';
+import { resolveImageUrl } from '../utils/helpers';
+import { BACKEND_ORIGIN } from '../config';
 import {
-  Camera, ShoppingBag, Sparkles, ArrowRight,
-  Mic, DollarSign, Globe, CheckCircle2, ShieldCheck
+  Camera, ShoppingBag, ArrowRight,
+  Package, TrendingUp, MapPin, Phone,
+  MessageSquare, CheckCircle2, ShieldCheck,
+  Plus, ExternalLink, Copy, Check
 } from 'lucide-react';
 import './DashboardPage.css';
 
@@ -10,7 +16,61 @@ export default function DashboardPage() {
   const { artisan, artisanId } = useAuth();
   const navigate = useNavigate();
 
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
   const displayName = artisan?.display_name || artisan?.username || 'Artisan';
+  const region = artisan?.region || 'Tamil Nadu, India';
+  const phone = artisan?.mobile_number;
+
+  useEffect(() => {
+    let isMounted = true;
+    listProducts()
+      .then((res) => {
+        if (!isMounted) return;
+        const list = res?.products || res || [];
+        setProducts(list);
+      })
+      .catch((err) => console.error('Failed to load products for dashboard:', err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Filter products by current artisan (match by ID, name, or registered phone)
+  const myProducts = products.filter((p) => {
+    if (!artisan && !artisanId) return false;
+    const matchId = p.artisan_id && (p.artisan_id === artisanId || p.artisan_id === artisan?.id || p.artisan_id === artisan?.artisan_id);
+    const matchName = p.artisan_name && displayName && (
+      p.artisan_name.toLowerCase() === displayName.toLowerCase() ||
+      displayName.toLowerCase().includes(p.artisan_name.toLowerCase()) ||
+      p.artisan_name.toLowerCase().includes(displayName.toLowerCase()) ||
+      (artisan?.username && p.artisan_name.toLowerCase() === artisan.username.toLowerCase())
+    );
+    const matchPhone = p.artisan_phone && phone && (
+      p.artisan_phone.replace(/\D/g, '') === String(phone).replace(/\D/g, '')
+    );
+    return matchId || matchName || matchPhone;
+  });
+
+  const displayCrafts = myProducts.length > 0 ? myProducts : [];
+
+  const totalValue = displayCrafts.reduce((sum, p) => {
+    const price = Number(p.pricing?.recommended_price || p.pricing?.final_price || 0);
+    return sum + (isNaN(price) ? 0 : price);
+  }, 0);
+
+  function handleCopyShareLink() {
+    const shareUrl = `${window.location.origin}/marketplace`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
     <div className="page dashboard-page">
@@ -20,8 +80,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="dashboard-container">
-        {/* Left Column: Quick Actions & Workflow */}
+        {/* Left Column: Quick Actions & Live Catalogue */}
         <div className="dashboard-main-col stagger">
+          {/* Action Cards (Kept as requested) */}
           <div className="dashboard-grid">
             <button
               className="dashboard-action-card animate-fade-in-up"
@@ -52,85 +113,187 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="dashboard-hero glass-card animate-fade-in-up" style={{ animationDelay: '150ms' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Sparkles size={20} className="dh-sparkle" />
-              <h3 style={{ margin: 0 }}>Smart Multilingual Cataloguing</h3>
+          {/* Studio Metrics Strip */}
+          <div className="studio-stats-row animate-fade-in-up">
+            <div className="stat-pill-card">
+              <div className="stat-pill-icon stat-icon-amber">
+                <Package size={20} />
+              </div>
+              <div className="stat-pill-info">
+                <span className="stat-pill-label">Live Listings</span>
+                <span className="stat-pill-value">{displayCrafts.length}</span>
+              </div>
             </div>
-            <p>
-              Photograph your craft, describe it naturally in your mother tongue, and let our
-              AI pipeline generate marketplace-ready titles, descriptions, pricing, and keywords — in seconds.
-            </p>
 
-            <div className="workflow-steps">
-              <div className="wf-step">
-                <span className="wf-num">1</span>
-                <span>Photo & Gemini enhancement</span>
+            <div className="stat-pill-card">
+              <div className="stat-pill-icon stat-icon-green">
+                <TrendingUp size={20} />
               </div>
-              <div className="wf-step">
-                <span className="wf-num">2</span>
-                <span>AssemblyAI speech transcription</span>
+              <div className="stat-pill-info">
+                <span className="stat-pill-label">Catalogue Value</span>
+                <span className="stat-pill-value">₹{totalValue.toLocaleString('en-IN')}</span>
               </div>
-              <div className="wf-step">
-                <span className="wf-num">3</span>
-                <span>Gemini cataloguing & pricing</span>
+            </div>
+
+            <div className="stat-pill-card">
+              <div className="stat-pill-icon stat-icon-terracotta">
+                <MapPin size={20} />
               </div>
-              <div className="wf-step">
-                <span className="wf-num">4</span>
-                <span>Publish to marketplace</span>
+              <div className="stat-pill-info">
+                <span className="stat-pill-label">Craft Region</span>
+                <span className="stat-pill-value stat-pill-truncate" title={region}>{region}</span>
               </div>
             </div>
           </div>
+
+          {/* My Published Crafts Showcase */}
+          <div className="studio-catalogue-card glass-card animate-fade-in-up">
+            <div className="scc-header">
+              <div>
+                <h3 className="scc-title">My Published Crafts</h3>
+                <p className="scc-subtitle">Real-time view of your crafts live on the ZenCraft Marketplace</p>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm scc-view-all"
+                onClick={() => navigate('/marketplace')}
+              >
+                <span>View in Marketplace</span>
+                <ExternalLink size={14} />
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="scc-loading">
+                <div className="spinner-sm" />
+                <span>Loading your studio crafts...</span>
+              </div>
+            ) : displayCrafts.length > 0 ? (
+              <div className="scc-grid">
+                {displayCrafts.slice(0, 4).map((craft) => {
+                  const rawImg = craft.images?.enhanced_url || craft.images?.original_url || craft.primary_image || (Array.isArray(craft.images) ? (craft.images[0]?.url || craft.images[0]) : null);
+                  const img = resolveImageUrl(rawImg, BACKEND_ORIGIN);
+                  const price = craft.pricing?.recommended_price || craft.pricing?.final_price;
+                  return (
+                    <div key={craft.product_id || craft.id} className="studio-craft-card">
+                      <div className="scc-img-wrap">
+                        {img ? (
+                          <img src={img} alt={craft.product_name || 'Craft'} />
+                        ) : (
+                          <div className="scc-img-placeholder">
+                            <ShoppingBag size={28} strokeWidth={1.5} />
+                          </div>
+                        )}
+                        <span className="scc-status-badge">Live</span>
+                      </div>
+                      <div className="scc-craft-body">
+                        <h4 className="scc-craft-name">{craft.product_name || 'Handmade Craft'}</h4>
+                        <p className="scc-craft-type">{craft.craft_type || craft.category || 'Handicraft'}</p>
+                        <div className="scc-craft-footer">
+                          <span className="scc-craft-price">
+                            {price ? `₹${Number(price).toLocaleString('en-IN')}` : 'Fair Price'}
+                          </span>
+                          <button
+                            className="scc-craft-btn"
+                            onClick={() => navigate('/marketplace')}
+                            title="Inspect craft on marketplace"
+                          >
+                            <ArrowRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="scc-empty-state">
+                <div className="scc-empty-icon">
+                  <Package size={36} />
+                </div>
+                <h4>No Crafts Published Yet</h4>
+                <p>Capture your first handmade creation using our AI camera and voice assistant to publish to the marketplace.</p>
+                <button
+                  className="btn btn-primary btn-md"
+                  onClick={() => navigate('/capture')}
+                >
+                  <Plus size={16} />
+                  <span>Catalog Your First Craft</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right Column: AI Studio Insights & Features */}
-        <div className="dashboard-side-col animate-fade-in-up" style={{ animationDelay: '250ms' }}>
-          <div className="card studio-insights-card">
-            <h3 className="sic-title">
-              <Sparkles size={18} style={{ color: 'var(--clr-accent)' }} />
-              AI Studio Capabilities
-            </h3>
-
-            <div className="sic-item">
-              <div className="sic-icon" style={{ color: 'var(--clr-accent)' }}>
-                <Globe size={18} />
-              </div>
-              <div>
-                <h4>Multilingual Audio Recognition</h4>
-                <p>Speak in Hindi, Tamil, Bengali, Marathi, Telugu, or English. AssemblyAI listens in your native dialect.</p>
-              </div>
+        {/* Right Column: Artisan Business Card & Direct Share */}
+        <div className="dashboard-side-col animate-fade-in-up" style={{ animationDelay: '150ms' }}>
+          <div className="card studio-profile-card">
+            <div className="spc-badge-row">
+              <span className="spc-verified-badge">
+                <ShieldCheck size={14} /> Verified Artisan
+              </span>
+              <span className="spc-status-live">● Active on ZenCraft</span>
             </div>
 
-            <div className="sic-item">
-              <div className="sic-icon" style={{ color: 'var(--clr-confirmed)' }}>
-                <DollarSign size={18} />
+            <div className="spc-artisan-header">
+              <div className="spc-avatar">
+                {displayName.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h4>Dynamic Pricing Intelligence</h4>
-                <p>Calculates materials, artisan labor time, and market benchmarks to recommend optimal selling prices.</p>
-              </div>
-            </div>
-
-            <div className="sic-item">
-              <div className="sic-icon" style={{ color: 'var(--clr-success)' }}>
-                <CheckCircle2 size={18} />
-              </div>
-              <div>
-                <h4>ONDC / E-Commerce Export</h4>
-                <p>One-click JSON export for seamless onboarding to national open networks and export boutiques.</p>
-              </div>
-            </div>
-
-            <div className="sic-footer">
-              <div className="sic-verified">
-                <ShieldCheck size={16} />
-                <span>Verified Artisan Account: <strong>{displayName}</strong></span>
-              </div>
-              {artisanId && (
-                <p className="dashboard-id">
-                  ID: <code>{artisanId.slice(0, 8)}…</code>
+                <h3 className="spc-name">{displayName}</h3>
+                <p className="spc-region">
+                  <MapPin size={13} /> {region}
                 </p>
+              </div>
+            </div>
+
+            <div className="spc-details-box">
+              <div className="spc-detail-row">
+                <span className="spc-detail-label">Buyer Contact</span>
+                <span className="spc-detail-val">
+                  <Phone size={13} /> {phone || 'Not registered'}
+                </span>
+              </div>
+              <div className="spc-detail-row">
+                <span className="spc-detail-label">Marketplace Status</span>
+                <span className="spc-detail-val spc-status-ok">
+                  <CheckCircle2 size={13} /> Direct WhatsApp Ready
+                </span>
+              </div>
+              <div className="spc-detail-row">
+                <span className="spc-detail-label">Studio ID</span>
+                <span className="spc-detail-val font-mono">
+                  {artisanId ? `${artisanId.slice(0, 10)}…` : 'Verified'}
+                </span>
+              </div>
+            </div>
+
+            <div className="spc-actions">
+              {phone && (
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`Check out authentic handcrafted products by ${displayName} from ${region} on ZenCraft: ${window.location.origin}/marketplace`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-success btn-block spc-share-btn"
+                >
+                  <MessageSquare size={16} />
+                  <span>Share Studio on WhatsApp</span>
+                </a>
               )}
+
+              <button
+                type="button"
+                className="btn btn-secondary btn-block spc-copy-btn"
+                onClick={handleCopyShareLink}
+              >
+                {copied ? <Check size={16} style={{ color: 'var(--clr-success)' }} /> : <Copy size={16} />}
+                <span>{copied ? 'Catalogue Link Copied!' : 'Copy Marketplace Link'}</span>
+              </button>
+            </div>
+
+            <div className="spc-quick-tip">
+              <p>
+                💡 <strong>Artisan Tip:</strong> When buyers discover your craft in the marketplace, they can contact your registered phone directly via WhatsApp or Phone call.
+              </p>
             </div>
           </div>
         </div>
@@ -138,3 +301,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

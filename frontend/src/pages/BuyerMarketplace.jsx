@@ -1,27 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { listProducts, exportProduct } from '../services/api';
+import { listProducts } from '../services/api';
 import { BACKEND_ORIGIN } from '../config';
 import { resolveImageUrl, formatPrice } from '../utils/helpers';
 import StatusBadge from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import {
-  Search, Filter, ShoppingBag, Star, X, Copy,
-  ChevronDown, Tag, Clock, FileText, Sparkles, LayoutGrid, PlusCircle, CheckCircle2,
-  Phone, MessageSquare
+  Search, Filter, ShoppingBag, Star, X,
+  ChevronDown, Tag, Clock, Sparkles, LayoutGrid, PlusCircle, CheckCircle2,
+  Phone, MessageSquare, MapPin, Share2, Printer
 } from 'lucide-react';
 import './BuyerMarketplace.css';
 
 export default function BuyerMarketplace({ toast }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isArtisan } = useAuth();
   const justPublished = location.state?.justPublished;
   const publishedName = location.state?.productName;
   const [bannerVisible, setBannerVisible] = useState(Boolean(justPublished));
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({
     category: '',
     craft_type: '',
@@ -30,18 +31,19 @@ export default function BuyerMarketplace({ toast }) {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [exportJson, setExportJson] = useState(null);
-  const [showExport, setShowExport] = useState(false);
 
-  async function fetchProducts() {
+  async function fetchProducts(search = searchQuery) {
     setLoading(true);
     try {
-      // GET /products — public, no auth. Response: { products: [...] }
       const activeFilters = {};
+      if (search && typeof search === 'string' && search.trim()) {
+        activeFilters.search = search.trim();
+      }
       if (filters.category) activeFilters.category = filters.category;
       if (filters.craft_type) activeFilters.craft_type = filters.craft_type;
       if (filters.min_price) activeFilters.min_price = filters.min_price;
       if (filters.max_price) activeFilters.max_price = filters.max_price;
+
       const res = await listProducts(activeFilters);
       setProducts(res.products || []);
     } catch (err) {
@@ -51,33 +53,250 @@ export default function BuyerMarketplace({ toast }) {
     }
   }
 
+  // Fetch on mount and when filters or debounced search query change
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchProducts(searchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filters]);
 
   function handleFilterApply() {
-    fetchProducts();
+    fetchProducts(searchQuery);
     setShowFilters(false);
   }
 
   function clearFilters() {
     setFilters({ category: '', craft_type: '', min_price: '', max_price: '' });
-    setTimeout(fetchProducts, 0);
   }
 
-  async function handleExport(productId) {
-    try {
-      const data = await exportProduct(productId);
-      setExportJson(data);
-      setShowExport(true);
-    } catch (err) {
-      toast.error(err.serverMessage || err.message);
+  // ─── Share Details Dossier & Print / PDF Generation ───────────────────────
+  function printProductDossier(p) {
+    if (!p) return;
+
+    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    if (!printWindow) {
+      window.print();
+      return;
     }
+
+    const title = p.product_name || 'Handcrafted Artisan Product';
+    const priceFormatted = p.pricing?.recommended_price
+      ? `₹${Number(p.pricing.recommended_price).toLocaleString('en-IN')}`
+      : 'Fair Market Price';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ZenCraft Dossier - ${title}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 40px;
+      color: #0f172a;
+      line-height: 1.6;
+    }
+    .header {
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #b45309;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    .subtitle {
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .section {
+      margin-bottom: 18px;
+    }
+    .label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .value {
+      font-size: 15px;
+      color: #0f172a;
+      font-weight: 500;
+    }
+    .price-value {
+      font-size: 22px;
+      font-weight: 800;
+      color: #b45309;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .desc-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 14px;
+      font-size: 14px;
+      color: #334155;
+      margin-top: 4px;
+      white-space: pre-wrap;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+    @media print {
+      body { margin: 20mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <img src="/zencraft-logo.jpg" alt="ZenCraft" />
+      <span>ZENCRAFT</span>
+    </div>
+    <div class="subtitle">CRAFT PRODUCT DOSSIER</div>
+  </div>
+
+  <div class="section">
+    <div class="label">Product</div>
+    <div class="value" style="font-size: 18px; font-weight: 700;">${p.product_name || 'Handcrafted Artisan Product'}</div>
+  </div>
+
+  <div class="grid">
+    <div class="section">
+      <div class="label">Artisan</div>
+      <div class="value">${p.artisan_name || 'Master Artisan'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Region</div>
+      <div class="value">${p.artisan_region || 'Tamil Nadu, India'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Craft Type</div>
+      <div class="value">${p.craft_type || p.category || 'Handicraft'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Category</div>
+      <div class="value">${p.category || 'Traditional Crafts'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Material</div>
+      <div class="value">${p.material || 'Natural artisan materials'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Technique</div>
+      <div class="value">${p.production?.technique || 'Traditional Handcrafted'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Production Time</div>
+      <div class="value">${p.production?.time_days ? `${p.production.time_days} days` : 'Dedicated Handwork'}</div>
+    </div>
+    <div class="section">
+      <div class="label">Recommended Price</div>
+      <div class="price-value">${priceFormatted}</div>
+    </div>
+  </div>
+
+  ${p.artisan_phone ? `
+  <div class="section">
+    <div class="label">Contact Artisan</div>
+    <div class="value" style="font-weight: 700; color: #047857;">📞 ${p.artisan_phone}</div>
+  </div>
+  ` : ''}
+
+  <div class="section">
+    <div class="label">Description</div>
+    <div class="desc-box">${p.description || 'Authentic handmade craft curated on ZenCraft.'}</div>
+  </div>
+
+  <div class="footer">
+    <span>ZenCraft AI-Driven Market Linkage Platform (SIH26090)</span>
+    <span>Verified Artisan Catalogue</span>
+  </div>
+
+  <script>
+    window.onload = function() {
+      window.print();
+    };
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
   }
 
-  function copyExport() {
-    navigator.clipboard.writeText(JSON.stringify(exportJson, null, 2));
-    toast.success('JSON copied to clipboard!');
+  function handleShareDetails(p) {
+    if (!p) return;
+
+    const title = `ZenCraft — ${p.product_name || 'Artisan Craft'}`;
+    const text = [
+      `ZENCRAFT`,
+      `CRAFT PRODUCT DOSSIER`,
+      `────────────────────────`,
+      `Product: ${p.product_name || 'Handcrafted Craft'}`,
+      `Artisan: ${p.artisan_name || 'Master Artisan'}`,
+      p.artisan_region ? `Region: ${p.artisan_region}` : null,
+      p.craft_type ? `Craft Type: ${p.craft_type}` : null,
+      p.category ? `Category: ${p.category}` : null,
+      p.material ? `Material: ${p.material}` : null,
+      p.production?.technique ? `Technique: ${p.production.technique}` : null,
+      p.production?.time_days ? `Production Time: ${p.production.time_days} days` : null,
+      p.description ? `Description: ${p.description}` : null,
+      p.pricing?.recommended_price ? `Recommended Price: ₹${p.pricing.recommended_price}` : null,
+      p.artisan_phone ? `Contact Artisan: ${p.artisan_phone}` : null,
+    ].filter(Boolean).join('\n');
+
+    // On browsers supporting Web Share API
+    if (navigator.share) {
+      navigator
+        .share({
+          title,
+          text,
+          url: window.location.href,
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            printProductDossier(p);
+          }
+        });
+    } else {
+      // Print / Save as PDF fallback
+      printProductDossier(p);
+    }
   }
 
   return (
@@ -132,20 +351,24 @@ export default function BuyerMarketplace({ toast }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => navigate('/dashboard')}
-              title="Return to Artisan Studio Dashboard"
-            >
-              <LayoutGrid size={15} /> Artisan Studio
-            </button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => navigate('/capture')}
-              title="Capture and publish another craft"
-            >
-              <PlusCircle size={15} /> Add Another Craft
-            </button>
+            {isArtisan && (
+              <>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => navigate('/dashboard')}
+                  title="Return to Artisan Studio Dashboard"
+                >
+                  <LayoutGrid size={15} /> Artisan Studio
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => navigate('/capture')}
+                  title="Capture and publish another craft"
+                >
+                  <PlusCircle size={15} /> Add Another Craft
+                </button>
+              </>
+            )}
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => setBannerVisible(false)}
@@ -158,9 +381,33 @@ export default function BuyerMarketplace({ toast }) {
         </div>
       )}
 
+      {/* Real-time Interactive Search Box */}
+      <div className="market-search-bar animate-fade-in">
+        <div className="market-search-input-wrap">
+          <Search size={18} className="market-search-icon" />
+          <input
+            type="text"
+            className="market-search-input"
+            placeholder="Search by craft, material, artisan, or region (e.g. Tenkasi, bamboo, Ahilan)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="market-search-clear"
+              onClick={() => setSearchQuery('')}
+              title="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Filter bar & Artisan Studio Links */}
-      <div className="market-toolbar animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="market-toolbar animate-fade-in">
+        <div className="market-toolbar-left">
           <button
             className={`btn btn-secondary btn-sm ${showFilters ? 'active' : ''}`}
             onClick={() => setShowFilters(!showFilters)}
@@ -171,17 +418,18 @@ export default function BuyerMarketplace({ toast }) {
           <span className="market-count">{products.length} product{products.length !== 1 ? 's' : ''}</span>
         </div>
 
-        {isAuthenticated && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Studio buttons visible ONLY to Artisans */}
+        {isAuthenticated && isArtisan && (
+          <div className="market-toolbar-actions">
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm market-studio-btn"
               onClick={() => navigate('/dashboard')}
               title="Return to Artisan Studio"
             >
               <LayoutGrid size={14} /> Artisan Studio
             </button>
             <button
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm market-newcraft-btn"
               onClick={() => navigate('/capture')}
               title="Add New Craft"
             >
@@ -257,8 +505,8 @@ export default function BuyerMarketplace({ toast }) {
       ) : products.length === 0 ? (
         <div className="market-empty animate-fade-in">
           <ShoppingBag size={48} strokeWidth={1} />
-          <h3>No products yet</h3>
-          <p>Published products will appear here</p>
+          <h3>No products found</h3>
+          <p>{searchQuery ? `No crafts matching "${searchQuery}"` : 'Published products will appear here'}</p>
         </div>
       ) : (
         <div className="product-grid stagger">
@@ -285,6 +533,11 @@ export default function BuyerMarketplace({ toast }) {
                   <div className="pc-artisan-by">
                     <span className="pc-by-label">By</span>
                     <span className="pc-artisan-name">{p.artisan_name || 'Master Artisan'}</span>
+                    {p.artisan_region && (
+                      <span className="pc-artisan-region" title={`Origin: ${p.artisan_region}`}>
+                        <MapPin size={9} /> {p.artisan_region}
+                      </span>
+                    )}
                     {p.artisan_phone && (
                       <span className="pc-artisan-phone" title={`Contact: ${p.artisan_phone}`}>
                         <Phone size={10} /> {p.artisan_phone}
@@ -327,6 +580,11 @@ export default function BuyerMarketplace({ toast }) {
                             <span className="detail-artisan-label">Artisan:</span>
                             <span className="detail-artisan-name">✨ {p.artisan_name || 'Master Artisan'}</span>
                           </div>
+                          {p.artisan_region && (
+                            <div className="detail-region-pill" title="Artisan origin & region">
+                              <MapPin size={12} /> {p.artisan_region}
+                            </div>
+                          )}
                           {p.artisan_phone && (
                             <a
                               href={`tel:${p.artisan_phone}`}
@@ -368,7 +626,7 @@ export default function BuyerMarketplace({ toast }) {
                               <span className="detail-sig-label">Authentic craft published by: </span>
                               <strong className="detail-sig-name">
                                 🎨 {p.artisan_name || 'Master Artisan'}
-                                {p.artisan_username ? ` (@${p.artisan_username})` : ''}
+                                {p.artisan_region ? ` (${p.artisan_region})` : ''}
                               </strong>
                             </div>
                             {p.artisan_phone && (
@@ -382,7 +640,7 @@ export default function BuyerMarketplace({ toast }) {
                                   <Phone size={12} /> Call: {p.artisan_phone}
                                 </a>
                                 <a
-                                  href={`https://wa.me/${p.artisan_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${p.artisan_name || 'Artisan'}, I am interested in your craft "${p.product_name || 'Product'}" on KalaCraft.`)}`}
+                                  href={`https://wa.me/${p.artisan_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${p.artisan_name || 'Artisan'}, I am interested in your craft "${p.product_name || 'Product'}" on ZenCraft.`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="btn btn-success btn-sm"
@@ -426,34 +684,29 @@ export default function BuyerMarketplace({ toast }) {
                       </div>
                     )}
 
-                    <button
-                      className="btn btn-secondary btn-block"
-                      onClick={() => handleExport(p.product_id)}
-                    >
-                      <FileText size={16} /> Export Marketplace JSON
-                    </button>
+                    {/* SHARE DETAILS BUTTON — Replaces Export Marketplace JSON */}
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+                      <button
+                        className="btn btn-primary btn-block"
+                        onClick={() => handleShareDetails(p)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '11px 16px' }}
+                        title="Share or download product dossier as PDF"
+                      >
+                        <Share2 size={16} /> Share Details
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => printProductDossier(p)}
+                        style={{ padding: '11px 16px' }}
+                        title="Print / Save as PDF"
+                      >
+                        <Printer size={16} />
+                      </button>
+                    </div>
                   </div>
                 </>
               );
             })()}
-          </div>
-        </div>
-      )}
-
-      {/* Export JSON modal */}
-      {showExport && exportJson && (
-        <div className="export-overlay" onClick={() => setShowExport(false)}>
-          <div className="export-modal glass-card animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div className="export-header">
-              <h3>ONDC / Marketplace JSON</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowExport(false)}>
-                <X size={16} />
-              </button>
-            </div>
-            <pre className="export-code">{JSON.stringify(exportJson, null, 2)}</pre>
-            <button className="btn btn-primary btn-block" onClick={copyExport}>
-              <Copy size={16} /> Copy to Clipboard
-            </button>
           </div>
         </div>
       )}

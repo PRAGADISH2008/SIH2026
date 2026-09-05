@@ -9,14 +9,18 @@ import CaptureFlow from './pages/CaptureFlow';
 import BuyerMarketplace from './pages/BuyerMarketplace';
 import './index.css';
 
-function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+function ArtisanRoute({ children }) {
+  const { isAuthenticated, isArtisan } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isArtisan) return <Navigate to="/marketplace" replace />;
+  return children;
 }
 
 function AppRoutes() {
   const toast = useToast();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isArtisan } = useAuth();
+
+  const defaultHome = isAuthenticated ? (isArtisan ? '/dashboard' : '/marketplace') : '/login';
 
   return (
     <>
@@ -25,19 +29,19 @@ function AppRoutes() {
       <Routes>
         <Route
           path="/"
-          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+          element={<Navigate to={defaultHome} replace />}
         />
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage toast={toast} />}
+          element={isAuthenticated ? <Navigate to={defaultHome} replace /> : <LoginPage toast={toast} />}
         />
         <Route
           path="/dashboard"
-          element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
+          element={<ArtisanRoute><DashboardPage /></ArtisanRoute>}
         />
         <Route
           path="/capture"
-          element={<ProtectedRoute><CaptureFlow toast={toast} /></ProtectedRoute>}
+          element={<ArtisanRoute><CaptureFlow toast={toast} /></ArtisanRoute>}
         />
         <Route
           path="/marketplace"
@@ -45,7 +49,7 @@ function AppRoutes() {
         />
         <Route
           path="*"
-          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+          element={<Navigate to={defaultHome} replace />}
         />
       </Routes>
       <BottomNav />

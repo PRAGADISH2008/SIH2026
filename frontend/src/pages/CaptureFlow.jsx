@@ -37,6 +37,62 @@ const LANGUAGES = [
   { code: 'en', label: 'English' },
 ];
 
+// High-performance client-side image compression for mobile devices
+async function compressImage(file, maxDimension = 1600, quality = 0.85) {
+  return new Promise((resolve) => {
+    if (!file || !file.type.startsWith('image/') || file.type === 'image/svg+xml') {
+      return resolve(file);
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            return resolve(file);
+          }
+          const baseName = (file.name || 'craft_photo').replace(/\.[^/.]+$/, '');
+          const compressedFile = new File([blob], `${baseName}.jpg`, {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          resolve(compressedFile);
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+
+    img.src = url;
+  });
+}
+
 export default function CaptureFlow({ toast }) {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
@@ -46,10 +102,12 @@ export default function CaptureFlow({ toast }) {
   const [loadingSteps, setLoadingSteps] = useState([]);
   const [loadingStepIdx, setLoadingStepIdx] = useState(0);
 
-  // Photo state
+  // Photo state & refs
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [imageResult, setImageResult] = useState(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
   // Resolved image URLs for preview and comparison
   const resolvedOriginal = resolveImageUrl(imageResult?.original_url || product?.images?.original_url, BACKEND_ORIGIN) || imagePreview;
@@ -80,42 +138,72 @@ export default function CaptureFlow({ toast }) {
   const [exportJson, setExportJson] = useState(null);
   const [showExport, setShowExport] = useState(false);
 
-  // ─── Step 0: Create draft + capture photo ──────────────────────────────
-  function handleFileSelect(e) {
+  // ─── Step 0: Auto-optimize & Upload on Mobile Capture ───────────────────
+  async function processAndUploadImage(rawFile) {
+    if (!rawFile) return;
+
+    // Show preview immediately from captured raw file for instant mobile visual feedback
+    const tempUrl = URL.createObjectURL(rawFile);
+    setImagePreview(tempUrl);
+    setLoading(true);
+    setLoadingMsg('Preparing your craft photo...');
+    setLoadingSteps([
+      'Optimizing photo for fast mobile upload',
+      'Creating product draft',
+      'Uploading to ZenCraft Studio',
+      'Enhancing image with AI',
+    ]);
+    setLoadingStepIdx(0);
+
+    try {
+      // 1. Client-side compress for mobile speed and reliability
+      const compressed = await compressImage(rawFile, 1600, 0.85);
+      setImageFile(compressed);
+
+      // Update preview to compressed URL
+      const compressedUrl = URL.createObjectURL(compressed);
+      setImagePreview(compressedUrl);
+
+      // 2. Create draft if we don't have a product yet
+      setLoadingStepIdx(1);
+      let prod = product;
+      if (!prod) {
+        prod = await createDraftProduct(language);
+        setProduct(prod);
+      }
+
+      // 3. Upload image
+      setLoadingStepIdx(2);
+      const res = await uploadImage(prod.product_id, compressed);
+      setImageResult(res.images);
+
+      // 4. Enhance with AI
+      setLoadingStepIdx(3);
+      await new Promise((r) => setTimeout(r, 600));
+
+      setCurrentStep(1);
+      toast.success('Photo captured & enhanced with AI!');
+    } catch (err) {
+      console.error('Photo capture upload failed:', err);
+      toast.error(err.serverMessage || err.message || 'Failed to upload photo. Please tap retry.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleFileSelect(e) {
     const file = e.target.files?.[0];
+    // Clear input value so taking photo again or retrying triggers onChange every time on mobile
+    e.target.value = '';
     if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+
+    // Immediately upload when user confirms photo (gives tick mark in camera)
+    await processAndUploadImage(file);
   }
 
   async function handleUploadImage() {
     if (!imageFile) return;
-    setLoading(true);
-    setLoadingMsg('Processing your craft photo...');
-    setLoadingSteps(['Creating product draft', 'Uploading image', 'Enhancing with AI']);
-    setLoadingStepIdx(0);
-    try {
-      // Create draft if we don't have a product yet
-      let prod = product;
-      if (!prod) {
-        setLoadingStepIdx(0);
-        prod = await createDraftProduct(language);
-        setProduct(prod);
-      }
-      setLoadingStepIdx(1);
-      const res = await uploadImage(prod.product_id, imageFile);
-      // Response: { images: { original_url, enhanced_url } }
-      setImageResult(res.images);
-      setLoadingStepIdx(2);
-      // Brief delay to show final step
-      await new Promise(r => setTimeout(r, 500));
-      setCurrentStep(1);
-      toast.success('Photo uploaded & enhanced!');
-    } catch (err) {
-      toast.error(err.serverMessage || err.message);
-    } finally {
-      setLoading(false);
-    }
+    await processAndUploadImage(imageFile);
   }
 
   // ─── Step 1: Voice recording ───────────────────────────────────────────
@@ -476,38 +564,84 @@ export default function CaptureFlow({ toast }) {
             <Camera size={20} />
             Capture Your Craft
           </h2>
-          <p className="flow-desc">Take a photo or select from gallery</p>
+          <p className="flow-desc">Take a photo using your camera or choose from your gallery</p>
 
           <div className="photo-area">
             {imagePreview ? (
               <div className="photo-preview">
                 <img src={imagePreview} alt="Craft preview" />
-                <button className="photo-remove" onClick={() => {
-                  setImageFile(null);
-                  setImagePreview(null);
-                }}>
+                <button
+                  type="button"
+                  className="photo-remove"
+                  onClick={() => {
+                    setImageFile(null);
+                    setImagePreview(null);
+                  }}
+                  title="Remove / Retake"
+                >
                   <X size={16} />
                 </button>
               </div>
             ) : (
-              <label className="photo-placeholder" htmlFor="photo-input">
-                <ImageIcon size={40} strokeWidth={1} />
-                <span>Tap to select photo</span>
-              </label>
+              <div
+                className="photo-placeholder"
+                onClick={() => cameraInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="photo-placeholder-icon">
+                  <Camera size={42} strokeWidth={1.5} />
+                </div>
+                <span className="photo-placeholder-title">Tap to Open Camera</span>
+                <span className="photo-placeholder-sub">Takes an instant photo of your product & auto-enhances</span>
+              </div>
             )}
+
+            {/* Hidden file inputs: dedicated camera & dedicated gallery */}
             <input
-              id="photo-input"
+              ref={cameraInputRef}
+              id="camera-input"
               type="file"
               accept="image/*"
               capture="environment"
               onChange={handleFileSelect}
               style={{ display: 'none' }}
             />
+            <input
+              ref={galleryInputRef}
+              id="gallery-input"
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+            />
+
+            {/* Mobile-friendly dual capture action buttons */}
+            <div className="photo-capture-options">
+              <button
+                type="button"
+                className="btn btn-primary photo-opt-btn photo-opt-camera"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={loading}
+              >
+                <Camera size={19} />
+                <span>{imagePreview ? 'Retake with Camera' : 'Take Photo (Camera)'}</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary photo-opt-btn"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={loading}
+              >
+                <ImageIcon size={18} />
+                <span>Choose from Gallery</span>
+              </button>
+            </div>
           </div>
 
           {/* Language selector */}
           <div style={{ marginTop: 'var(--space-md)' }}>
-            <label className="input-label">Your language</label>
+            <label className="input-label">Your native language (for voice & details)</label>
             <div className="lang-chips">
               {LANGUAGES.map((l) => (
                 <button
@@ -522,14 +656,17 @@ export default function CaptureFlow({ toast }) {
             </div>
           </div>
 
-          <button
-            className="btn btn-primary btn-block btn-lg"
-            disabled={!imageFile}
-            onClick={handleUploadImage}
-            style={{ marginTop: 'var(--space-lg)' }}
-          >
-            <Upload size={18} /> Upload & Enhance
-          </button>
+          {imageFile && (
+            <button
+              type="button"
+              className="btn btn-primary btn-block btn-lg"
+              disabled={loading}
+              onClick={handleUploadImage}
+              style={{ marginTop: 'var(--space-lg)' }}
+            >
+              <Upload size={18} /> {loading ? 'Uploading & Enhancing...' : 'Upload & Enhance Now'}
+            </button>
+          )}
         </div>
       )}
 
