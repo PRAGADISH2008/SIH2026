@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
+const pool = require('./db/pool');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 
@@ -15,6 +16,24 @@ const PORT = process.env.PORT || 5000;
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// ─── Automatic Database Table Initialization ────────────────────────────────
+async function initDb() {
+  if (!process.env.DATABASE_URL) {
+    console.warn('⚠️ DATABASE_URL not configured. Skipping table creation.');
+    return;
+  }
+  try {
+    const schemaPath = path.join(__dirname, 'db', 'schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const sql = fs.readFileSync(schemaPath, 'utf8');
+      await pool.query(sql);
+      console.log('✅ PostgreSQL database tables and indexes verified/initialized successfully');
+    }
+  } catch (err) {
+    console.error('⚠️ Database auto-initialization notice:', err.message);
+  }
 }
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
@@ -45,7 +64,8 @@ app.use((req, res) => {
 });
 
 // ─── Start server ───────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Artisan Catalogue API running on http://localhost:${PORT}`);
   console.log(`📋 Base URL: http://localhost:${PORT}/api/v1`);
+  await initDb();
 });
