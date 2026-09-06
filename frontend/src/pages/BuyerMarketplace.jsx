@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { listProducts } from '../services/api';
 import { BACKEND_ORIGIN } from '../config';
 import { resolveImageUrl, formatPrice } from '../utils/helpers';
-import StatusBadge from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import {
@@ -528,7 +527,6 @@ export default function BuyerMarketplace({ toast }) {
                       <ShoppingBag size={32} strokeWidth={1} />
                     </div>
                   )}
-                  <StatusBadge status={p.status} />
                 </div>
                 <div className="pc-body">
                   <h3 className="pc-title">{p.product_name || 'Untitled Craft'}</h3>
@@ -598,7 +596,6 @@ export default function BuyerMarketplace({ toast }) {
                           )}
                         </div>
                       </div>
-                      <StatusBadge status={p.status} />
                     </div>
 
                     <p className="detail-price">{formatPrice(p.pricing?.recommended_price)}</p>

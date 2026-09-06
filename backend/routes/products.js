@@ -204,46 +204,128 @@ router.post('/:id/image', authMiddleware, requireRole('artisan'), upload.single(
     const originalUrl = `/uploads/${req.file.filename}`;
     let enhancedUrl = originalUrl; // fallback: use original if enhancement fails
 
-    // ─── Gemini Image Enhancement ──────────────────────────────────────
-    try {
-      const imageBuffer = fs.readFileSync(req.file.path);
-      const result = await enhanceProductImage(imageBuffer, req.file.mimetype);
-
-      if (result && result.buffer && result.buffer.length > 0) {
-        const ext = mimeToExtension(result.mimeType);
-        const enhancedFilename = `enhanced_${uuidv4()}${ext}`;
-        const enhancedPath = path.join(__dirname, '..', 'uploads', enhancedFilename);
-
-        fs.writeFileSync(enhancedPath, result.buffer);
-        enhancedUrl = `/uploads/${enhancedFilename}`;
-        console.log(`✅ Enhanced image saved: ${enhancedUrl}`);
-      } else {
-        console.warn(
-          '⚠ Gemini image enhancement failed — original image used as enhanced_url fallback'
-        );
-      }
-    } catch (enhanceErr) {
-      console.warn(
-        '⚠ Gemini image enhancement failed — original image used as enhanced_url fallback:',
-        enhanceErr.message || enhanceErr
-      );
-    }
-
-    // ─── Update database ───────────────────────────────────────────────
+    // ─── Save uploaded image immediately & respond without blocking UI ──
     await pool.query(
       'UPDATE products SET images_original_url = $1, images_enhanced_url = $2 WHERE product_id = $3',
       [originalUrl, enhancedUrl, req.params.id]
     );
 
+    // Respond immediately so mobile and desktop uploads complete instantly
     res.status(200).json({
       images: {
         original_url: originalUrl,
         enhanced_url: enhancedUrl,
       },
     });
+
+    // ─── Async background enhancement (non-blocking) ────────────────────
+    setImmediate(async () => {
+      try {
+        if (!fs.existsSync(req.file.path)) return;
+        const imageBuffer = fs.readFileSync(req.file.path);
+        const result = await enhanceProductImage(imageBuffer, req.file.mimetype);
+
+        if (result && result.buffer && result.buffer.length > 0) {
+          const ext = mimeToExtension(result.mimeType);
+          const enhancedFilename = `enhanced_${uuidv4()}${ext}`;
+          const enhancedPath = path.join(__dirname, '..', 'uploads', enhancedFilename);
+
+          fs.writeFileSync(enhancedPath, result.buffer);
+          const bgEnhancedUrl = `/uploads/${enhancedFilename}`;
+          await pool.query(
+            'UPDATE products SET images_enhanced_url = $1 WHERE product_id = $2',
+            [bgEnhancedUrl, req.params.id]
+          );
+          console.log(`✅ Background enhanced image saved: ${bgEnhancedUrl}`);
+        }
+      } catch (enhanceErr) {
+        console.warn(
+          '⚠ Background image enhancement skipped/failed:',
+          enhanceErr.message || enhanceErr
+        );
+      }
+    });
   } catch (err) {
     console.error('Image upload error:', err);
     return errorResponse(res, 500, 'Failed to process image');
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 3b. POST /products/:id/enhanced-image — Upload AI-enhanced / background-removed image
+// ═════════════════════════════════════════════════════════════════════════════
+router.post('/:id/enhanced-image', authMiddleware, requireRole('artisan'), upload.single('image'), async (req, res) => {
+  try {
+    const row = await getProductById(req.params.id);
+    if (!row) {
+      return errorResponse(res, 404, 'Product not found');
+    }
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
+    }
+    if (!req.file) {
+      return errorResponse(res, 400, 'Image file is required');
+    }
+
+    const enhancedUrl = `/uploads/${req.file.filename}`;
+    await pool.query(
+      'UPDATE products SET images_enhanced_url = $1 WHERE product_id = $2',
+      [enhancedUrl, req.params.id]
+    );
+
+    res.status(200).json({
+      images: {
+        original_url: row.images_original_url,
+        enhanced_url: enhancedUrl,
+      },
+    });
+  } catch (err) {
+    console.error('Enhanced image upload error:', err);
+    return errorResponse(res, 500, 'Failed to save enhanced image');
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 3c. POST /products/:id/remove-background — AI background removal (RMBG-1.4)
+// ═════════════════════════════════════════════════════════════════════════════
+router.post('/:id/remove-background', authMiddleware, requireRole('artisan'), async (req, res) => {
+  try {
+    const row = await getProductById(req.params.id);
+    if (!row) {
+      return errorResponse(res, 404, 'Product not found');
+    }
+    if (row.artisan_id !== req.artisan_id) {
+      return errorResponse(res, 403, 'You do not have permission to modify this product');
+    }
+    if (!row.images_original_url) {
+      return errorResponse(res, 400, 'Product has no original image to process');
+    }
+
+    const mode = req.body?.mode || req.query?.mode || 'studio';
+    const originalBasename = path.basename(row.images_original_url);
+    const inputPath = path.join(__dirname, '..', 'uploads', originalBasename);
+
+    if (!fs.existsSync(inputPath)) {
+      return errorResponse(res, 404, 'Original image file not found on server');
+    }
+
+    const { removeBackgroundFromFile } = require('../utils/backgroundRemovalService');
+    const { enhancedUrl } = await removeBackgroundFromFile(inputPath, mode);
+
+    await pool.query(
+      'UPDATE products SET images_enhanced_url = $1 WHERE product_id = $2',
+      [enhancedUrl, req.params.id]
+    );
+
+    res.status(200).json({
+      images: {
+        original_url: row.images_original_url,
+        enhanced_url: enhancedUrl,
+      },
+    });
+  } catch (err) {
+    console.error('Remove background error:', err);
+    return errorResponse(res, 500, err.message || 'Failed to remove background');
   }
 });
 

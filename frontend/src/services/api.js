@@ -19,30 +19,44 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function request(method, path, { body, isFormData } = {}) {
+async function request(method, path, { body, isFormData, timeoutMs = 90000 } = {}) {
   const url = `${API_BASE_URL}${path}`;
   const headers = { ...authHeaders() };
   if (!isFormData) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const options = { method, headers };
-  if (body) {
-    options.body = isFormData ? body : JSON.stringify(body);
-  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const res = await fetch(url, options);
-  const data = await res.json();
+  try {
+    const options = { method, headers, signal: controller.signal };
+    if (body) {
+      options.body = isFormData ? body : JSON.stringify(body);
+    }
 
-  if (!res.ok) {
-    // Backend returns { error: true, message: string, code: number }
-    const err = new Error(data.message || `Request failed (${res.status})`);
-    err.code = data.code || res.status;
-    err.serverMessage = data.message;
+    const res = await fetch(url, options);
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Backend returns { error: true, message: string, code: number }
+      const err = new Error(data.message || `Request failed (${res.status})`);
+      err.code = data.code || res.status;
+      err.serverMessage = data.message;
+      throw err;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const timeoutErr = new Error('Network request timed out. Please check your connection and retry.');
+      timeoutErr.serverMessage = timeoutErr.message;
+      throw timeoutErr;
+    }
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return data;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -239,6 +253,48 @@ export async function uploadImage(productId, imageFile) {
   });
 }
 
+/**
+ * Upload an AI-enhanced / background-removed image blob.
+ * POST /api/v1/products/:id/enhanced-image
+ */
+export async function uploadEnhancedImage(productId, imageBlob) {
+  if (MOCK_MODE) {
+    await sleep(600);
+    return {
+      images: {
+        enhanced_url: URL.createObjectURL(imageBlob),
+      },
+    };
+  }
+  const formData = new FormData();
+  const filename = `enhanced_${Date.now()}.png`;
+  formData.append('image', imageBlob, filename);
+  return request('POST', `/products/${productId}/enhanced-image`, {
+    body: formData,
+    isFormData: true,
+  });
+}
+
+/**
+ * Request AI background removal on the product photo.
+ * POST /api/v1/products/:id/remove-background
+ */
+export async function removeProductBackground(productId, mode = 'studio') {
+  if (MOCK_MODE) {
+    await sleep(1500);
+    return {
+      images: {
+        original_url: '/uploads/mock.jpg',
+        enhanced_url: '/uploads/mock.jpg',
+      },
+    };
+  }
+  return request('POST', `/products/${productId}/remove-background`, {
+    body: { mode },
+    timeoutMs: 60000,
+  });
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // 4. UPLOAD & TRANSCRIBE VOICE — POST /products/:id/voice
 // Request: multipart/form-data, field name "audio"
@@ -259,6 +315,7 @@ export async function uploadVoice(productId, audioFile, language = null) {
   return request('POST', `/products/${productId}/voice`, {
     body: formData,
     isFormData: true,
+    timeoutMs: 90000,
   });
 }
 
@@ -293,7 +350,9 @@ export async function generateCatalogue(productId) {
     return mock.mockCatalogueResponse;
   }
   // POST with NO body — backend ignores req.body entirely
-  return request('POST', `/products/${productId}/catalogue`);
+  return request('POST', `/products/${productId}/catalogue`, {
+    timeoutMs: 90000,
+  });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import {
-  createDraftProduct, uploadImage, uploadVoice,
+  createDraftProduct, uploadImage, uploadEnhancedImage, removeProductBackground, uploadVoice,
   generateCatalogue, getPrice, confirmProduct,
   publishProduct, getProduct, exportProduct
 } from '../services/api';
@@ -45,10 +45,22 @@ async function compressImage(file, maxDimension = 1600, quality = 0.85) {
       return resolve(file);
     }
 
+    let finished = false;
+    const safeResolve = (val) => {
+      if (!finished) {
+        finished = true;
+        resolve(val);
+      }
+    };
+
+    // Safety fallback: if mobile canvas/decoder takes > 2500ms, use original file directly
+    const fallbackTimer = setTimeout(() => safeResolve(file), 2500);
+
     const img = new Image();
     const url = URL.createObjectURL(file);
 
     img.onload = () => {
+      clearTimeout(fallbackTimer);
       URL.revokeObjectURL(url);
       let { width, height } = img;
 
@@ -71,14 +83,14 @@ async function compressImage(file, maxDimension = 1600, quality = 0.85) {
       canvas.toBlob(
         (blob) => {
           if (!blob) {
-            return resolve(file);
+            return safeResolve(file);
           }
           const baseName = (file.name || 'craft_photo').replace(/\.[^/.]+$/, '');
           const compressedFile = new File([blob], `${baseName}.jpg`, {
             type: 'image/jpeg',
             lastModified: Date.now(),
           });
-          resolve(compressedFile);
+          safeResolve(compressedFile);
         },
         'image/jpeg',
         quality
@@ -86,8 +98,9 @@ async function compressImage(file, maxDimension = 1600, quality = 0.85) {
     };
 
     img.onerror = () => {
+      clearTimeout(fallbackTimer);
       URL.revokeObjectURL(url);
-      resolve(file);
+      safeResolve(file);
     };
 
     img.src = url;
@@ -110,10 +123,64 @@ export default function CaptureFlow({ toast }) {
   const [imageResult, setImageResult] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const audioInputRef = useRef(null);
+
+  // AI Background Removal state
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [bgProgress, setBgProgress] = useState(null);
+  const [bgEnhancedDataUrl, setBgEnhancedDataUrl] = useState(null);
+  const [bgMode, setBgMode] = useState('studio');
 
   // Resolved image URLs for preview and comparison
+  const hasCustomCutout = Boolean(bgEnhancedDataUrl);
   const resolvedOriginal = resolveImageUrl(imageResult?.original_url || product?.images?.original_url, BACKEND_ORIGIN) || imagePreview;
-  const resolvedEnhanced = resolveImageUrl(imageResult?.enhanced_url || product?.images?.enhanced_url, BACKEND_ORIGIN) || imagePreview;
+  const resolvedEnhanced = bgEnhancedDataUrl || resolveImageUrl(imageResult?.enhanced_url || product?.images?.enhanced_url, BACKEND_ORIGIN) || imagePreview;
+
+  async function handleRemoveBackground(targetMode = 'studio') {
+    if (!product?.product_id) {
+      toast.error('Product draft not found. Please capture or upload a photo first.');
+      return;
+    }
+
+    setIsRemovingBg(true);
+    setBgProgress({
+      phase: 'processing',
+      percent: 30,
+      text: targetMode === 'transparent' ? 'Extracting transparent cutout with AI...' : 'Creating clean studio background with AI...',
+    });
+
+    // Simulate smooth progress while AI model executes
+    const progressTimer = setInterval(() => {
+      setBgProgress((prev) => {
+        if (!prev || prev.percent >= 85) return prev;
+        return { ...prev, percent: prev.percent + 15 };
+      });
+    }, 800);
+
+    try {
+      const res = await removeProductBackground(product.product_id, targetMode);
+      clearInterval(progressTimer);
+
+      if (res?.images?.enhanced_url) {
+        setImageResult((prev) => ({
+          ...(prev || {}),
+          enhanced_url: res.images.enhanced_url,
+        }));
+        setBgEnhancedDataUrl(resolveImageUrl(res.images.enhanced_url, BACKEND_ORIGIN));
+        setBgMode(targetMode);
+        toast.success(targetMode === 'transparent' ? 'Transparent cutout ready!' : 'Clean studio background applied!');
+      } else {
+        throw new Error('No enhanced image returned from studio');
+      }
+    } catch (err) {
+      clearInterval(progressTimer);
+      console.error('Background removal error:', err);
+      toast.error(err.serverMessage || err.message || 'Background removal could not complete. Original photo preserved.');
+    } finally {
+      setIsRemovingBg(false);
+      setBgProgress(null);
+    }
+  }
 
   // Voice state - synced with global language
   const [language, setLanguage] = useState(() => (globalLang && globalLang !== 'en' ? globalLang : 'auto'));
@@ -217,6 +284,14 @@ export default function CaptureFlow({ toast }) {
 
   // ─── Step 1: Voice recording ───────────────────────────────────────────
   async function startRecording() {
+    // Mobile browsers (Chrome/Safari) block navigator.mediaDevices on local network HTTP
+    const isUnsecure = window.isSecureContext === false;
+    if (isUnsecure || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast.info('Opening phone voice recorder...');
+      audioInputRef.current?.click();
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -232,7 +307,7 @@ export default function CaptureFlow({ toast }) {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach((t) => t.stop());
         cancelAnimationFrame(animFrameRef.current);
       };
 
@@ -248,7 +323,9 @@ export default function CaptureFlow({ toast }) {
       analyserRef.current = analyser;
       drawWaveform();
     } catch (err) {
-      toast.error('Microphone access denied');
+      console.warn('Live mic stream restricted by browser:', err);
+      toast.warning('Browser mic access restricted. Tap the button below to use Phone Voice Recorder.');
+      audioInputRef.current?.click();
     }
   }
 
@@ -289,6 +366,16 @@ export default function CaptureFlow({ toast }) {
     setAudioBlob(null);
     setAudioUrl(null);
     setVoiceResult(null);
+  }
+
+  function handleAudioFileSelect(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setAudioBlob(file);
+    setAudioUrl(URL.createObjectURL(file));
+    toast.success('Voice note recorded & ready to process!');
   }
 
   async function handleUploadVoice() {
@@ -856,13 +943,67 @@ export default function CaptureFlow({ toast }) {
                   )}
                 </div>
                 <div className="ic-item">
-                  <span className="ic-label">Enhanced</span>
+                  <span className="ic-label">
+                    Enhanced {hasCustomCutout && <span className="ic-ai-tag">✨ AI Studio</span>}
+                  </span>
                   {resolvedEnhanced ? (
                     <img src={resolvedEnhanced} alt="Enhanced" className="ic-img" />
                   ) : (
                     <div className="ic-placeholder skeleton" />
                   )}
                 </div>
+              </div>
+
+              {/* AI Background Removal Toolbar */}
+              <div className="ic-bg-toolbar">
+                {isRemovingBg ? (
+                  <div className="ic-bg-progress">
+                    <div className="ic-bg-progress-bar-wrap">
+                      <div
+                        className="ic-bg-progress-bar"
+                        style={{ width: `${bgProgress?.percent || 15}%` }}
+                      />
+                    </div>
+                    <span className="ic-bg-progress-text">
+                      <Sparkles size={14} className="spin-slow" /> {bgProgress?.text || 'Removing background with AI...'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="ic-bg-actions">
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${hasCustomCutout ? 'btn-secondary' : 'btn-primary'}`}
+                      onClick={() => handleRemoveBackground('studio')}
+                      title="Isolate craft with clean studio white background"
+                    >
+                      <Sparkles size={14} />
+                      <span>{hasCustomCutout ? 'Re-apply Studio Background' : 'Remove Background (AI Studio)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => handleRemoveBackground('transparent')}
+                      title="Transparent background cutout"
+                    >
+                      Transparent Cutout
+                    </button>
+
+                    {hasCustomCutout && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => {
+                          setBgEnhancedDataUrl(null);
+                          toast.info('Reverted to original photo.');
+                        }}
+                        title="Revert to original photo"
+                      >
+                        <RotateCcw size={13} /> Revert
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -873,12 +1014,30 @@ export default function CaptureFlow({ toast }) {
 
             <div className="recorder-controls">
               {!audioBlob ? (
-                <button
-                  className={`recorder-btn ${isRecording ? 'recording' : ''}`}
-                  onClick={isRecording ? stopRecording : startRecording}
-                >
-                  {isRecording ? <Square size={20} /> : <Mic size={20} />}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className={`recorder-btn ${isRecording ? 'recording' : ''}`}
+                    onClick={isRecording ? stopRecording : startRecording}
+                    title="Tap to record voice"
+                  >
+                    {isRecording ? <Square size={20} /> : <Mic size={20} />}
+                  </button>
+                  <p className="recorder-hint">
+                    {isRecording ? t('voice.recording', 'Recording... tap to stop') : t('voice.tapToRecord', 'Tap to start recording')}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '10px', fontSize: '0.82rem', gap: '6px', padding: '8px 16px', borderRadius: '20px' }}
+                    onClick={() => audioInputRef.current?.click()}
+                  >
+                    <Mic size={14} /> Record via Phone Voice App / Audio File
+                  </button>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--text-muted, #64748b)', marginTop: '4px' }}>
+                    Recommended on mobile Wi-Fi
+                  </span>
+                </>
               ) : (
                 <div className="recorder-playback">
                   <audio src={audioUrl} controls className="audio-player" />
@@ -887,10 +1046,17 @@ export default function CaptureFlow({ toast }) {
                   </button>
                 </div>
               )}
-              <p className="recorder-hint">
-                {isRecording ? t('voice.recording', 'Recording... tap to stop') : audioBlob ? 'Review your recording' : t('voice.tapToRecord', 'Tap to start recording')}
-              </p>
             </div>
+
+            {/* Hidden native audio recorder / file input */}
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*"
+              capture="microphone"
+              onChange={handleAudioFileSelect}
+              style={{ display: 'none' }}
+            />
           </div>
 
           {/* Voice result preview */}

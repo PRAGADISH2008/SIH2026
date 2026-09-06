@@ -56,7 +56,7 @@ async function enhanceProductImage(imageBuffer, mimeType) {
     const ai = getClient();
     const base64Data = imageBuffer.toString('base64');
 
-    const response = await ai.models.generateContent({
+    const apiPromise = ai.models.generateContent({
       model: IMAGE_MODEL,
       contents: [
         {
@@ -82,6 +82,12 @@ async function enhanceProductImage(imageBuffer, mimeType) {
         responseModalities: ['IMAGE'],
       },
     });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Gemini image enhancement timed out')), 5000)
+    );
+
+    const response = await Promise.race([apiPromise, timeoutPromise]);
 
     // Extract the generated image from response candidates
     const candidates = response.candidates || [];
