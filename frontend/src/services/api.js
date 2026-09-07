@@ -279,7 +279,7 @@ export async function uploadEnhancedImage(productId, imageBlob) {
  * Request AI background removal on the product photo.
  * POST /api/v1/products/:id/remove-background
  */
-export async function removeProductBackground(productId, mode = 'studio') {
+export async function removeProductBackground(productId, mode = 'studio', imageFile = null) {
   if (MOCK_MODE) {
     await sleep(1500);
     return {
@@ -289,9 +289,19 @@ export async function removeProductBackground(productId, mode = 'studio') {
       },
     };
   }
+  if (imageFile) {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    formData.append('mode', mode);
+    return request('POST', `/products/${productId}/remove-background`, {
+      body: formData,
+      isFormData: true,
+      timeoutMs: 90000,
+    });
+  }
   return request('POST', `/products/${productId}/remove-background`, {
     body: { mode },
-    timeoutMs: 60000,
+    timeoutMs: 90000,
   });
 }
 

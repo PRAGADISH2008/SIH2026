@@ -287,8 +287,9 @@ router.post('/:id/enhanced-image', authMiddleware, requireRole('artisan'), uploa
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 3c. POST /products/:id/remove-background — AI background removal (RMBG-1.4)
+// Accepts optional multipart image file directly from client or uses existing product photo
 // ═════════════════════════════════════════════════════════════════════════════
-router.post('/:id/remove-background', authMiddleware, requireRole('artisan'), async (req, res) => {
+router.post('/:id/remove-background', authMiddleware, requireRole('artisan'), upload.single('image'), async (req, res) => {
   try {
     const row = await getProductById(req.params.id);
     if (!row) {
@@ -297,16 +298,46 @@ router.post('/:id/remove-background', authMiddleware, requireRole('artisan'), as
     if (row.artisan_id !== req.artisan_id) {
       return errorResponse(res, 403, 'You do not have permission to modify this product');
     }
-    if (!row.images_original_url) {
-      return errorResponse(res, 400, 'Product has no original image to process');
-    }
 
     const mode = req.body?.mode || req.query?.mode || 'studio';
-    const originalBasename = path.basename(row.images_original_url);
-    const inputPath = path.join(__dirname, '..', 'uploads', originalBasename);
+    let inputPath = null;
+    let originalUrl = row.images_original_url;
 
-    if (!fs.existsSync(inputPath)) {
-      return errorResponse(res, 404, 'Original image file not found on server');
+    // 1. If client provided the image file directly, use it
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      inputPath = req.file.path;
+      originalUrl = `/uploads/${req.file.filename}`;
+      await pool.query(
+        'UPDATE products SET images_original_url = $1 WHERE product_id = $2',
+        [originalUrl, req.params.id]
+      );
+    } else {
+      // 2. Otherwise use existing original image from database
+      if (!row.images_original_url) {
+        return errorResponse(res, 400, 'Product has no original image to process. Please upload a photo first.');
+      }
+
+      const originalBasename = path.basename(row.images_original_url.split('?')[0]);
+      inputPath = path.join(__dirname, '..', 'uploads', originalBasename);
+
+      if (!fs.existsSync(inputPath)) {
+        // If image URL is external or on cloud backend, attempt to fetch it
+        if (/^https?:\/\//i.test(row.images_original_url)) {
+          try {
+            const fetchRes = await fetch(row.images_original_url);
+            if (fetchRes.ok) {
+              const arrayBuf = await fetchRes.arrayBuffer();
+              fs.writeFileSync(inputPath, Buffer.from(arrayBuf));
+            }
+          } catch (dlErr) {
+            console.warn('Could not fetch external image for background removal:', dlErr.message);
+          }
+        }
+      }
+
+      if (!fs.existsSync(inputPath)) {
+        return errorResponse(res, 404, 'Original photo file not found on server. Please retake or re-upload your craft photo.');
+      }
     }
 
     const { removeBackgroundFromFile } = require('../utils/backgroundRemovalService');
@@ -319,7 +350,7 @@ router.post('/:id/remove-background', authMiddleware, requireRole('artisan'), as
 
     res.status(200).json({
       images: {
-        original_url: row.images_original_url,
+        original_url: originalUrl,
         enhanced_url: enhancedUrl,
       },
     });
