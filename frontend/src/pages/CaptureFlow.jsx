@@ -143,64 +143,23 @@ export default function CaptureFlow({ toast }) {
       return;
     }
 
-    const sourceImage = imageFile || imagePreview || resolvedOriginal;
-    if (!sourceImage) {
-      toast.error('No craft photo found to process. Please capture or upload a photo.');
-      return;
-    }
-
     setIsRemovingBg(true);
     setBgProgress({
-      phase: 'init',
-      percent: 15,
-      text: targetMode === 'transparent' ? 'Extracting transparent cutout with AI...' : 'Creating clean studio background with AI...',
+      phase: 'processing',
+      percent: 30,
+      text: targetMode === 'transparent' ? 'Extracting transparent cutout with RMBG-1.4 AI...' : 'Creating clean studio background with AI...',
     });
 
-    try {
-      let enhancedBlob = null;
-      let enhancedDataUrl = null;
-
-      // 1. Try client-side background removal first (100% private, instantaneous, zero server OOM)
-      try {
-        const clientRes = await removeImageBackground(sourceImage, {
-          background: targetMode,
-          onProgress: (p) => setBgProgress(p),
-        });
-        enhancedBlob = clientRes?.blob;
-        enhancedDataUrl = clientRes?.dataUrl;
-      } catch (clientErr) {
-        console.warn('Client-side background removal failed, attempting server fallback:', clientErr);
-      }
-
-      // If client-side removal succeeded:
-      if (enhancedBlob && enhancedDataUrl) {
-        setBgEnhancedDataUrl(enhancedDataUrl);
-        setBgMode(targetMode);
-        toast.success(targetMode === 'transparent' ? 'Transparent cutout ready!' : 'Clean studio background applied!');
-
-        // Persist enhanced image to server and cloud database asynchronously
-        uploadEnhancedImage(product.product_id, enhancedBlob)
-          .then((res) => {
-            if (res?.images?.enhanced_url) {
-              setImageResult((prev) => ({
-                ...(prev || {}),
-                enhanced_url: res.images.enhanced_url,
-              }));
-            }
-          })
-          .catch((uploadErr) => {
-            console.warn('Could not persist enhanced cutout to server (local preview preserved):', uploadErr);
-          });
-        return;
-      }
-
-      // 2. Server fallback: send the image file directly so server never fails with missing file
-      setBgProgress({
-        phase: 'server',
-        percent: 60,
-        text: 'Processing on AI studio server...',
+    const progressTimer = setInterval(() => {
+      setBgProgress((prev) => {
+        if (!prev || prev.percent >= 88) return prev;
+        return { ...prev, percent: prev.percent + 15 };
       });
+    }, 800);
+
+    try {
       const res = await removeProductBackground(product.product_id, targetMode, imageFile);
+      clearInterval(progressTimer);
 
       if (res?.images?.enhanced_url) {
         setImageResult((prev) => ({
@@ -214,6 +173,7 @@ export default function CaptureFlow({ toast }) {
         throw new Error('No enhanced image returned from studio');
       }
     } catch (err) {
+      clearInterval(progressTimer);
       console.error('Background removal error:', err);
       toast.error(err.serverMessage || err.message || 'Background removal could not complete. Original photo preserved.');
     } finally {
