@@ -10,12 +10,18 @@ async function getModelAndProcessor() {
   env.allowLocalModels = false;
 
   if (!modelPromise) {
-    modelPromise = AutoModel.from_pretrained('briaai/RMBG-1.4');
+    modelPromise = AutoModel.from_pretrained('briaai/RMBG-1.4', { quantized: true });
   }
   if (!processorPromise) {
     processorPromise = AutoProcessor.from_pretrained('briaai/RMBG-1.4');
   }
   return Promise.all([modelPromise, processorPromise]);
+}
+
+function warmupModel() {
+  getModelAndProcessor()
+    .then(() => console.log('✅ RMBG-1.4 AI Background Removal model pre-warmed and ready in memory'))
+    .catch((err) => console.warn('⚠️ RMBG-1.4 background warmup notice:', err.message));
 }
 
 /**
@@ -79,4 +85,5 @@ async function removeBackgroundFromFile(inputPath, mode = 'studio') {
 
 module.exports = {
   removeBackgroundFromFile,
+  warmupModel,
 };

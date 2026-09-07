@@ -8,6 +8,7 @@ const fs = require('fs');
 const pool = require('./db/pool');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
+const { warmupModel } = require('./utils/backgroundRemovalService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -68,4 +69,5 @@ app.listen(PORT, async () => {
   console.log(`🚀 Artisan Catalogue API running on http://localhost:${PORT}`);
   console.log(`📋 Base URL: http://localhost:${PORT}/api/v1`);
   await initDb();
+  warmupModel();
 });
