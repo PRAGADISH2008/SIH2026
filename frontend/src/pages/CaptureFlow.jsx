@@ -143,37 +143,49 @@ export default function CaptureFlow({ toast }) {
       return;
     }
 
+    const sourceImage = imageFile || imagePreview || resolvedOriginal;
+    if (!sourceImage) {
+      toast.error('No craft photo found to process. Please capture or upload a photo.');
+      return;
+    }
+
     setIsRemovingBg(true);
     setBgProgress({
-      phase: 'processing',
-      percent: 30,
+      phase: 'init',
+      percent: 20,
       text: targetMode === 'transparent' ? 'Extracting transparent cutout with RMBG-1.4 AI...' : 'Creating clean studio background with AI...',
     });
 
-    const progressTimer = setInterval(() => {
-      setBgProgress((prev) => {
-        if (!prev || prev.percent >= 88) return prev;
-        return { ...prev, percent: prev.percent + 15 };
-      });
-    }, 800);
-
     try {
-      const res = await removeProductBackground(product.product_id, targetMode, imageFile);
-      clearInterval(progressTimer);
+      // 1. Run RMBG-1.4 AI locally in the browser (instant, zero 502, zero memory crash)
+      const res = await removeImageBackground(sourceImage, {
+        background: targetMode,
+        onProgress: (p) => setBgProgress(p),
+      });
 
-      if (res?.images?.enhanced_url) {
-        setImageResult((prev) => ({
-          ...(prev || {}),
-          enhanced_url: res.images.enhanced_url,
-        }));
-        setBgEnhancedDataUrl(resolveImageUrl(res.images.enhanced_url, BACKEND_ORIGIN));
+      if (res?.dataUrl && res?.blob) {
+        // Display result instantly in the studio preview
+        setBgEnhancedDataUrl(res.dataUrl);
         setBgMode(targetMode);
         toast.success(targetMode === 'transparent' ? 'Transparent cutout ready!' : 'Clean studio background applied!');
+
+        // 2. Asynchronously save enhanced image to PostgreSQL cloud database
+        uploadEnhancedImage(product.product_id, res.blob)
+          .then((uploadRes) => {
+            if (uploadRes?.images?.enhanced_url) {
+              setImageResult((prev) => ({
+                ...(prev || {}),
+                enhanced_url: uploadRes.images.enhanced_url,
+              }));
+            }
+          })
+          .catch((err) => {
+            console.warn('Asynchronous cloud save notice:', err.message);
+          });
       } else {
-        throw new Error('No enhanced image returned from studio');
+        throw new Error('Could not generate studio image');
       }
     } catch (err) {
-      clearInterval(progressTimer);
       console.error('Background removal error:', err);
       toast.error(err.serverMessage || err.message || 'Background removal could not complete. Original photo preserved.');
     } finally {
