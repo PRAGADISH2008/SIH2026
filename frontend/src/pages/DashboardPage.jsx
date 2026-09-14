@@ -179,7 +179,23 @@ export default function DashboardPage() {
                     <div key={craft.product_id || craft.id} className="studio-craft-card">
                       <div className="scc-img-wrap">
                         {img ? (
-                          <img src={img} alt={craft.product_name || 'Craft'} />
+                          <img
+                            src={img}
+                            alt={craft.product_name || 'Craft'}
+                            onError={(e) => {
+                              const fallbackOriginal = craft.images?.original_url ? resolveImageUrl(craft.images.original_url, BACKEND_ORIGIN) : null;
+                              if (fallbackOriginal && e.currentTarget.src !== fallbackOriginal && e.currentTarget.dataset.triedOriginal !== 'true') {
+                                e.currentTarget.dataset.triedOriginal = 'true';
+                                e.currentTarget.src = fallbackOriginal;
+                              } else {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = '/zencraft-logo.jpg';
+                                e.currentTarget.style.objectFit = 'contain';
+                                e.currentTarget.style.padding = '12px';
+                                e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                              }
+                            }}
+                          />
                         ) : (
                           <div className="scc-img-placeholder">
                             <ShoppingBag size={28} strokeWidth={1.5} />

@@ -521,7 +521,22 @@ export default function BuyerMarketplace({ toast }) {
               >
                 <div className="pc-image-wrap">
                   {imgUrl ? (
-                    <img src={imgUrl} alt={p.product_name} className="pc-image" />
+                    <img
+                      src={imgUrl}
+                      alt={p.product_name}
+                      className="pc-image"
+                      onError={(e) => {
+                        const fallbackOriginal = p.images?.original_url ? resolveImageUrl(p.images.original_url, BACKEND_ORIGIN) : null;
+                        if (fallbackOriginal && e.currentTarget.src !== fallbackOriginal && e.currentTarget.dataset.triedOriginal !== 'true') {
+                          e.currentTarget.dataset.triedOriginal = 'true';
+                          e.currentTarget.src = fallbackOriginal;
+                        } else {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = '/zencraft-logo.jpg';
+                          e.currentTarget.classList.add('pc-image-fallback');
+                        }
+                      }}
+                    />
                   ) : (
                     <div className="pc-image-placeholder">
                       <ShoppingBag size={32} strokeWidth={1} />
@@ -569,7 +584,24 @@ export default function BuyerMarketplace({ toast }) {
               const imgUrl = resolveImageUrl(p.images?.enhanced_url || p.images?.original_url, BACKEND_ORIGIN);
               return (
                 <>
-                  {imgUrl && <img src={imgUrl} alt={p.product_name} className="detail-image" />}
+                  {imgUrl && (
+                    <img
+                      src={imgUrl}
+                      alt={p.product_name}
+                      className="detail-image"
+                      onError={(e) => {
+                        const fallbackOriginal = p.images?.original_url ? resolveImageUrl(p.images.original_url, BACKEND_ORIGIN) : null;
+                        if (fallbackOriginal && e.currentTarget.src !== fallbackOriginal && e.currentTarget.dataset.triedOriginal !== 'true') {
+                          e.currentTarget.dataset.triedOriginal = 'true';
+                          e.currentTarget.src = fallbackOriginal;
+                        } else {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = '/zencraft-logo.jpg';
+                          e.currentTarget.classList.add('detail-image-fallback');
+                        }
+                      }}
+                    />
+                  )}
 
                   <div className="detail-body">
                     <div className="detail-header">

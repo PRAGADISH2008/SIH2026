@@ -674,3 +674,12 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ─── Graceful Image Fallback Styling ────────────────────────────────────── */
+.pc-image-fallback,
+.detail-image-fallback {
+  object-fit: contain !important;
+  padding: 24px !important;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border-bottom: 1px solid var(--clr-border);
+}

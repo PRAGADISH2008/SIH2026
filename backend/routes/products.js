@@ -16,6 +16,8 @@ const {
   mimeToExtension,
 } = require('../utils/geminiService');
 const { transcribeAudio } = require('../utils/assemblyService');
+const { transcribeWithBhashini } = require('../utils/bhashiniService');
+
 
 const router = express.Router();
 
@@ -380,8 +382,32 @@ router.post('/:id/voice', authMiddleware, requireRole('artisan'), upload.single(
     }
 
     const preferredLanguage = req.body.language || null;
-    console.log(`🎙️ [AssemblyAI] Transcribing voice input: ${req.file.originalname} (${req.file.path}) [Language: ${preferredLanguage || 'auto-detect'}]`);
-    const { text: transcriptText, languageCode, confidence } = await transcribeAudio(req.file.path, preferredLanguage);
+    let transcriptText = '';
+    let languageCode = preferredLanguage || 'ta';
+    let confidence = 0.95;
+
+    // 1. Attempt Bhashini (MeitY Govt AI) if credentials are provided in .env
+    if (process.env.BHASHINI_USER_ID && process.env.BHASHINI_API_KEY) {
+      try {
+        console.log(`🇮🇳 [Voice Pipeline] Calling Bhashini ULCA Speech Recognition (${preferredLanguage || 'auto'})...`);
+        const bhashiniRes = await transcribeWithBhashini(req.file.path, preferredLanguage);
+        transcriptText = bhashiniRes.text;
+        languageCode = bhashiniRes.languageCode;
+        confidence = bhashiniRes.confidence;
+        console.log(`✅ [Voice Pipeline] Bhashini successfully transcribed audio!`);
+      } catch (bhashiniErr) {
+        console.warn(`⚠️ [Voice Pipeline] Bhashini transcription failed (${bhashiniErr.message}). Seamlessly falling back to AssemblyAI...`);
+      }
+    }
+
+    // 2. Fallback to AssemblyAI if Bhashini was not configured or threw an error
+    if (!transcriptText) {
+      console.log(`🎙️ [AssemblyAI] Transcribing voice input: ${req.file.originalname} (${req.file.path}) [Language: ${preferredLanguage || 'auto-detect'}]`);
+      const assemblyRes = await transcribeAudio(req.file.path, preferredLanguage);
+      transcriptText = assemblyRes.text;
+      languageCode = assemblyRes.languageCode;
+      confidence = assemblyRes.confidence;
+    }
 
     console.log(`🤖 [Gemini] Interpreting transcript and extracting attributes (language: ${languageCode})...`);
     const extracted = await extractProductAttributes(transcriptText, languageCode);
